@@ -264,52 +264,79 @@ function ThreatCenter() {
             <div className="card shadow border-0 h-100">
               <div className="card-body p-4 d-flex flex-column justify-content-between">
                 <div>
-                  <h5 className="mb-4 text-white font-monospace text-gradient-magenta" style={{ fontSize: "1.1rem", fontWeight: "700" }}>
-                    AI Threat Classifier Performance (OOD Generalization)
+                  <h5 className="mb-3 text-white font-monospace text-gradient-magenta" style={{ fontSize: "1.1rem", fontWeight: "700" }}>
+                    AI Threat Classifier Performance (Synthetic Shift Generalization)
                   </h5>
-                  <div className="row text-center g-3 mb-4">
+                  <div className="row text-center g-2 mb-3">
                     <div className="col-6 col-md-3">
-                      <span className="text-secondary font-monospace" style={{ fontSize: "0.75rem" }}>Accuracy</span>
-                      <h4 className="mt-1 mb-0 text-white font-monospace" style={{ fontWeight: "700" }}>
+                      <span className="text-secondary font-monospace" style={{ fontSize: "0.68rem" }}>Accuracy</span>
+                      <h5 className="mt-1 mb-0 text-white font-monospace" style={{ fontWeight: "700" }}>
                         {(metrics.accuracy * 100).toFixed(1)}%
-                      </h4>
+                      </h5>
                     </div>
                     <div className="col-6 col-md-3">
-                      <span className="text-secondary font-monospace" style={{ fontSize: "0.75rem" }}>Precision</span>
-                      <h4 className="mt-1 mb-0 text-white font-monospace" style={{ fontWeight: "700" }}>
-                        {(metrics.precision * 100).toFixed(1)}%
-                      </h4>
+                      <span className="text-secondary font-monospace" style={{ fontSize: "0.68rem" }}>Balanced Acc</span>
+                      <h5 className="mt-1 mb-0 text-gradient-green font-monospace" style={{ fontWeight: "700" }}>
+                        {(metrics.balanced_accuracy * 100).toFixed(1)}%
+                      </h5>
                     </div>
                     <div className="col-6 col-md-3">
-                      <span className="text-secondary font-monospace" style={{ fontSize: "0.75rem" }}>Recall</span>
-                      <h4 className="mt-1 mb-0 text-white font-monospace" style={{ fontWeight: "700" }}>
-                        {(metrics.recall * 100).toFixed(1)}%
-                      </h4>
+                      <span className="text-secondary font-monospace" style={{ fontSize: "0.68rem" }}>Macro F1</span>
+                      <h5 className="mt-1 mb-0 text-white font-monospace" style={{ fontWeight: "700" }}>
+                        {(metrics.macro_f1_score * 100).toFixed(1)}%
+                      </h5>
                     </div>
                     <div className="col-6 col-md-3">
-                      <span className="text-secondary font-monospace" style={{ fontSize: "0.75rem" }}>F1-Score</span>
-                      <h4 className="mt-1 mb-0 text-white font-monospace" style={{ fontWeight: "700" }}>
-                        {(metrics.f1_score * 100).toFixed(1)}%
-                      </h4>
+                      <span className="text-secondary font-monospace" style={{ fontSize: "0.68rem" }}>Macro AUC</span>
+                      <h5 className="mt-1 mb-0 text-white font-monospace" style={{ fontWeight: "700" }}>
+                        {(metrics.macro_roc_auc * 100).toFixed(1)}%
+                      </h5>
                     </div>
                   </div>
-                  <hr className="my-3 border-secondary border-opacity-25" />
-                  <div className="d-flex justify-content-between align-items-center mb-2" style={{ fontSize: "0.9rem" }}>
+                  
+                  {/* Per-Class Metrics Table */}
+                  <div className="table-responsive my-3">
+                    <table className="table table-sm table-dark border-secondary border-opacity-10 align-middle mb-0" style={{ fontSize: "0.75rem" }}>
+                      <thead>
+                        <tr>
+                          <th className="text-start">Class Name</th>
+                          <th>F1-Score</th>
+                          <th>ROC-AUC (OvR)</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {["Normal", "DDoS", "Cryptojacking", "Thermal Tampering", "Reconnaissance"].map((className) => {
+                          const f1 = metrics.per_class_f1?.[className] ?? 0;
+                          const auc = metrics.per_class_auc?.[className] ?? 0;
+                          return (
+                            <tr key={className}>
+                              <td className="text-start text-secondary fw-bold">{className}</td>
+                              <td className="font-monospace text-light">{(f1 * 100).toFixed(1)}%</td>
+                              <td className="font-monospace text-light">{(auc * 100).toFixed(3)}%</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <hr className="my-2 border-secondary border-opacity-25" />
+                  <div className="d-flex justify-content-between align-items-center mb-1" style={{ fontSize: "0.85rem" }}>
                     <span className="text-secondary">Weighted ROC-AUC score:</span>
                     <span className="text-gradient-green fw-bold font-monospace">
                       {(metrics.roc_auc * 100).toFixed(4)}%
                     </span>
                   </div>
-                  <div className="d-flex justify-content-between align-items-center" style={{ fontSize: "0.9rem" }}>
+                  <div className="d-flex justify-content-between align-items-center" style={{ fontSize: "0.85rem" }}>
                     <span className="text-secondary">Optimal Hyperparameters (GridSearchCV):</span>
-                    <span className="text-warning font-monospace">
+                    <span className="text-warning font-monospace" style={{ fontSize: "0.8rem" }}>
                       depth={metrics.best_params?.max_depth || 4}, lr={metrics.best_params?.learning_rate || 0.05}, trees={metrics.best_params?.n_estimators || 100}
                     </span>
                   </div>
                 </div>
                 <div className="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25 py-2 px-3 mt-3 text-start">
-                  <i className="bi bi-shield-check text-success me-2"></i>
-                  Evaluated on completely independent out-of-distribution shifted environment.
+                  <i className="bi bi-info-circle text-warning me-2"></i>
+                  Note: Metrics evaluate predictions on our synthetic shifted environment. High classification rates reflect distinct feature separations.
                 </div>
               </div>
             </div>
@@ -320,7 +347,7 @@ function ThreatCenter() {
             <div className="card shadow border-0 h-100">
               <div className="card-body p-4">
                 <h5 className="mb-3 text-white font-monospace" style={{ fontSize: "1.1rem", fontWeight: "700" }}>
-                  OOD Evaluation Confusion Matrix
+                  Synthetic Shift Confusion Matrix
                 </h5>
                 <div className="table-responsive">
                   <table className="table table-bordered border-secondary border-opacity-25 text-center text-light align-middle mb-0" style={{ fontSize: "0.78rem" }}>

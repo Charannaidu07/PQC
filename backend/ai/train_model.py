@@ -3,6 +3,7 @@ QuantumShield-IoT
 AI Multi-Class Threat Detection Model Trainer with GridSearchCV and Cross-Validation
 """
 
+import os
 import pandas as pd
 import numpy as np
 import random
@@ -12,11 +13,13 @@ import joblib
 import json
 from sklearn.metrics import (
     accuracy_score,
+    balanced_accuracy_score,
     classification_report,
     confusion_matrix,
     precision_recall_fscore_support,
     roc_auc_score
 )
+from sklearn.preprocessing import label_binarize
 
 # Set seeds for reproducibility
 np.random.seed(42)
@@ -148,7 +151,7 @@ def main():
     X_train = train_df.drop("attack", axis=1)
     y_train = train_df["attack"]
 
-    print("\nGenerating Independent Out-of-Distribution (Noisy & Shifted) Evaluation Dataset...")
+    print("\nGenerating Independent Synthetic Shifted Evaluation Dataset...")
     test_df = generate_shifted_test_dataset(samples=3000)
     X_test = test_df.drop("attack", axis=1)
     y_test = test_df["attack"]
@@ -179,17 +182,17 @@ def main():
     # Select the optimal trained model
     model = grid_search.best_estimator_
     
-    # Evaluate generalization on the completely independent, noisy shifted dataset
+    # Evaluate generalization on the independent, noisy shifted dataset
     predictions = model.predict(X_test)
     accuracy = accuracy_score(y_test, predictions)
 
-    print(f"\nGeneralization Accuracy on Independent OOD Test Set: {accuracy:.4%}")
+    print(f"\nGeneralization Accuracy on Independent Synthetic Shifted Test Set: {accuracy:.4%}")
     
     target_names = ["Normal", "DDoS", "Cryptojacking", "Thermal Tampering", "Reconnaissance"]
-    print("\nClassification Report (OOD Test Set):")
+    print("\nClassification Report (Synthetic Shifted Test Set):")
     print(classification_report(y_test, predictions, target_names=target_names))
 
-    print("\nConfusion Matrix (OOD Test Set):")
+    print("\nConfusion Matrix (Synthetic Shifted Test Set):")
     print(confusion_matrix(y_test, predictions))
 
     # Feature Importance analysis of the best estimator
@@ -199,33 +202,60 @@ def main():
     for f, imp in sorted(zip(features, importances), key=lambda x: x[1], reverse=True):
         print(f" - {f}: {imp:.4%}")
 
-    joblib.dump(model, "threat_model.pkl")
-    print("\nOptimized Multi-Class Threat Detection Model Saved: threat_model.pkl")
+    MODEL_DIR = os.path.dirname(os.path.abspath(__file__))
+    model_file_path = os.path.join(MODEL_DIR, "threat_model.pkl")
+    metrics_file_path = os.path.join(MODEL_DIR, "model_metrics.json")
+
+    joblib.dump(model, model_file_path)
+    print(f"\nOptimized Multi-Class Threat Detection Model Saved: {model_file_path}")
 
     # Serialize evaluation metrics for dashboard display
     try:
         # Calculate scores
         precision, recall, f1, _ = precision_recall_fscore_support(y_test, predictions, average='weighted')
+        macro_prec, macro_rec, macro_f1, _ = precision_recall_fscore_support(y_test, predictions, average='macro')
+        balanced_acc = balanced_accuracy_score(y_test, predictions)
         probabilities = model.predict_proba(X_test)
-        roc_auc = roc_auc_score(y_test, probabilities, multi_class='ovr', average='weighted')
+        
+        # Calculate OvR ROC-AUC scores (Macro, Weighted, and Per-Class)
+        macro_auc = roc_auc_score(y_test, probabilities, multi_class='ovr', average='macro')
+        weighted_auc = roc_auc_score(y_test, probabilities, multi_class='ovr', average='weighted')
+        
+        y_test_bin = label_binarize(y_test, classes=[0, 1, 2, 3, 4])
+        per_class_auc_dict = {}
+        for i, name in enumerate(target_names):
+            auc_val = roc_auc_score(y_test_bin[:, i], probabilities[:, i])
+            per_class_auc_dict[name] = float(auc_val)
+            
         conf_mat = confusion_matrix(y_test, predictions).tolist()
+
+        # Calculate per-class F1-scores
+        _, _, class_f1s, _ = precision_recall_fscore_support(y_test, predictions, average=None)
+        per_class_f1_dict = {target_names[i]: float(class_f1s[i]) for i in range(len(target_names))}
 
         feature_imp_dict = {f: float(imp) for f, imp in zip(features, importances)}
 
         metrics_data = {
             "accuracy": float(accuracy),
+            "balanced_accuracy": float(balanced_acc),
             "precision": float(precision),
             "recall": float(recall),
             "f1_score": float(f1),
-            "roc_auc": float(roc_auc),
+            "macro_precision": float(macro_prec),
+            "macro_recall": float(macro_rec),
+            "macro_f1_score": float(macro_f1),
+            "roc_auc": float(weighted_auc),
+            "macro_roc_auc": float(macro_auc),
+            "per_class_auc": per_class_auc_dict,
+            "per_class_f1": per_class_f1_dict,
             "best_params": grid_search.best_params_,
             "confusion_matrix": conf_mat,
             "feature_importances": feature_imp_dict
         }
 
-        with open("model_metrics.json", "w") as f:
+        with open(metrics_file_path, "w") as f:
             json.dump(metrics_data, f, indent=4)
-        print("Model metrics saved to model_metrics.json successfully.")
+        print(f"Model metrics saved to {metrics_file_path} successfully.")
     except Exception as e:
         print(f"Failed to serialize model metrics: {e}")
 

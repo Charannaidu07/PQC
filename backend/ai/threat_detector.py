@@ -35,6 +35,22 @@ MODEL_PATH = os.path.join(
     "threat_model.pkl"
 )
 
+if not os.path.exists(MODEL_PATH):
+    print(f"AI threat model not found at {MODEL_PATH}. Training model now...")
+    try:
+        from ai.train_model import main as train_main
+        train_main()
+    except ImportError:
+        try:
+            from train_model import main as train_main
+            train_main()
+        except ImportError:
+            # Fallback to subprocess
+            import subprocess
+            import sys
+            script_path = os.path.join(os.path.dirname(__file__), "train_model.py")
+            subprocess.run([sys.executable, script_path], check=True)
+
 model = joblib.load(MODEL_PATH)
 print("Multi-Class Threat Detection Model Loaded")
 

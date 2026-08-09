@@ -1,9 +1,28 @@
 {
     "accuracy": 0.999,
+    "balanced_accuracy": 0.9979356867518767,
     "precision": 0.9990037981841264,
     "recall": 0.999,
     "f1_score": 0.9989999007719336,
+    "macro_precision": 0.9969146379111502,
+    "macro_recall": 0.9979356867518767,
+    "macro_f1_score": 0.9974198775872841,
     "roc_auc": 0.9999136406433357,
+    "macro_roc_auc": 0.9998366707809969,
+    "per_class_auc": {
+        "Normal": 1.0,
+        "DDoS": 0.9991921451652995,
+        "Cryptojacking": 0.999991208739685,
+        "Thermal Tampering": 0.9999999999999999,
+        "Reconnaissance": 1.0
+    },
+    "per_class_f1": {
+        "Normal": 1.0,
+        "DDoS": 0.9968454258675079,
+        "Cryptojacking": 0.9959677419354839,
+        "Thermal Tampering": 0.9968051118210862,
+        "Reconnaissance": 0.9974811083123426
+    },
     "best_params": {
         "learning_rate": 0.05,
         "max_depth": 4,
