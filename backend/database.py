@@ -120,9 +120,14 @@ class Device(Base):
         default=100.0
     )
 
-    selected_algorithm = Column(
+    selected_kem = Column(
         String(100),
         default="Kyber512"
+    )
+
+    selected_signature = Column(
+        String(100),
+        default="Dilithium2"
     )
 
     created_at = Column(

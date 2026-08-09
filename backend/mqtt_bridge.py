@@ -61,10 +61,10 @@ def process_payload(payload: dict):
         else:
             threat_score = random.uniform(0.02, 0.10) # realistic normal variation
 
-        selected_algorithm = "Kyber512"
+        selected_kem, selected_sig = "Kyber512", "Dilithium2"
         if select_algorithm:
             try:
-                selected_algorithm = select_algorithm(
+                selected_kem, selected_sig = select_algorithm(
                     cpu_usage=cpu_usage,
                     ram_usage=memory_usage,
                     battery_level=battery,
@@ -86,18 +86,19 @@ def process_payload(payload: dict):
             # Randomly log normal transactions rarely to prevent log flooding (1.2% total chance)
             rand = random.random()
             if rand < 0.005:
-                log_event("KEM", "INF", f"Shared secret decapsulated successfully via {selected_algorithm} on {device_id}")
+                log_event("KEM", "INF", f"Shared secret decapsulated successfully via {selected_kem} on {device_id}")
             elif rand < 0.010:
-                log_event("SIG", "INF", f"{selected_algorithm} digital signature validated for firmware on {device_id}")
+                log_event("SIG", "INF", f"{selected_sig} digital signature validated for firmware on {device_id}")
             elif rand < 0.012:
-                log_event("PQC", "INF", f"Session keypair rotated via {selected_algorithm} on {device_id}")
+                log_event("PQC", "INF", f"Session keypair rotated via {selected_kem} + {selected_sig} on {device_id}")
 
         # 4. Save device state in DB
         if existing_device:
             existing_device.cpu_usage = cpu_usage
             existing_device.memory_usage = memory_usage
             existing_device.battery_level = battery
-            existing_device.selected_algorithm = selected_algorithm
+            existing_device.selected_kem = selected_kem
+            existing_device.selected_signature = selected_sig
             existing_device.last_seen = datetime.utcnow()
             existing_device.status = status
             db.commit()
@@ -108,7 +109,8 @@ def process_payload(payload: dict):
                 cpu_usage=cpu_usage,
                 memory_usage=memory_usage,
                 battery_level=battery,
-                selected_algorithm=selected_algorithm,
+                selected_kem=selected_kem,
+                selected_signature=selected_sig,
                 last_seen=datetime.utcnow(),
                 status=status
             )

@@ -109,7 +109,8 @@ class VirtualDevice:
         self.attack_type = None  # "DDoS", "Cryptojacking", "Thermal Tampering"
         self.attack_duration = 0
         self.mitigation_duration = 0
-        self.selected_algorithm = "Kyber512"
+        self.selected_kem = "Kyber512"
+        self.selected_signature = "Dilithium2"
         
     def trigger_attack(self, attack_type: str):
         """Manually trigger an attack on this device"""
@@ -145,8 +146,9 @@ class VirtualDevice:
             from database import SessionLocal, Device
             session = SessionLocal()
             dev = session.query(Device).filter(Device.device_id == self.device_id).first()
-            if dev and dev.selected_algorithm:
-                self.selected_algorithm = dev.selected_algorithm
+            if dev:
+                self.selected_kem = dev.selected_kem or "Kyber512"
+                self.selected_signature = dev.selected_signature or "Dilithium2"
             session.close()
         except Exception:
             pass
@@ -253,10 +255,9 @@ class VirtualDevice:
             "Kyber512": 0.001,
             "Kyber768": 0.003,
             "Falcon512": 0.005,
-            "Dilithium2": 0.015,
-            "SPHINCS+": 0.020
+            "Dilithium2": 0.015
         }
-        pqc_overhead = pqc_drain_rates.get(self.selected_algorithm, 0.001)
+        pqc_overhead = pqc_drain_rates.get(self.selected_kem, 0.001) + pqc_drain_rates.get(self.selected_signature, 0.001)
         
         attack_drain_factor = 1.0
         if self.state == "ATTACKING":

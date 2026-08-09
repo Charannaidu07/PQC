@@ -129,7 +129,8 @@ def register_device(
         cpu_usage=8.0,
         memory_usage=128.0,
         battery_level=100.0,
-        selected_algorithm="Kyber512",
+        selected_kem="Kyber512",
+        selected_signature="Dilithium2",
         status="ONLINE",
         last_seen=datetime.utcnow()
     )
@@ -249,11 +250,8 @@ def get_stats(
     )
 
     pqc_algorithms = (
-        db.query(
-            Device.selected_algorithm
-        )
-        .distinct()
-        .count()
+        db.query(Device.selected_kem).distinct().count()
+        + db.query(Device.selected_signature).distinct().count()
     )
 
     # Average Benchmark Metrics
@@ -515,31 +513,23 @@ def get_benchmarks(
 def pqc_distribution(
     db: Session = Depends(get_db)
 ):
-
-    results = (
-
-        db.query(
-            Device.selected_algorithm,
-            func.count(Device.id)
-        )
-
-        .group_by(
-            Device.selected_algorithm
-        )
-
+    kem_results = (
+        db.query(Device.selected_kem, func.count(Device.id))
+        .group_by(Device.selected_kem)
         .all()
-
     )
-
-    return [
-
-        {
-            "algorithm": r[0],
-            "count": r[1]
-        }
-
-        for r in results
-    ]
+    sig_results = (
+        db.query(Device.selected_signature, func.count(Device.id))
+        .group_by(Device.selected_signature)
+        .all()
+    )
+    
+    data = []
+    for r in kem_results:
+        data.append({"algorithm": r[0], "count": r[1]})
+    for r in sig_results:
+        data.append({"algorithm": r[0], "count": r[1]})
+    return data
 
 # --------------------------------------------------
 # SIMULATOR & LOGS API
@@ -622,7 +612,8 @@ def reset_simulator(db: Session = Depends(get_db)):
         dev.cpu_usage = 8.0
         dev.memory_usage = 128.0
         dev.battery_level = 100.0
-        dev.selected_algorithm = "Kyber512"
+        dev.selected_kem = "Kyber512"
+        dev.selected_signature = "Dilithium2"
         dev.last_seen = datetime.utcnow()
     db.commit()
     

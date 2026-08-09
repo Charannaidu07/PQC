@@ -77,9 +77,14 @@ function DeviceTable({ devices }) {
                 </div>
               </td>
               <td>
-                <span className={getPqcBadgeClass(device.selected_algorithm)}>
-                  {device.selected_algorithm}
-                </span>
+                <div className="d-flex flex-column gap-1">
+                  <span className={getPqcBadgeClass(device.selected_kem)} style={{ fontSize: "0.7rem", width: "fit-content" }}>
+                    KEM: {device.selected_kem}
+                  </span>
+                  <span className={getPqcBadgeClass(device.selected_signature)} style={{ fontSize: "0.7rem", width: "fit-content" }}>
+                    SIG: {device.selected_signature}
+                  </span>
+                </div>
               </td>
             </tr>
           ))}
