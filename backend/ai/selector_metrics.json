@@ -1,0 +1,27 @@
+{
+    "kem": {
+        "accuracy": 0.993,
+        "f1_macro": 0.9904464379543914,
+        "cross_validation_mean": 0.9960000000000001,
+        "confusion_matrix": [
+            [
+                238,
+                3
+            ],
+            [
+                4,
+                755
+            ]
+        ]
+    },
+    "sig": {
+        "accuracy": 1.0,
+        "f1_macro": 1.0,
+        "cross_validation_mean": 1.0,
+        "confusion_matrix": [
+            [
+                1000
+            ]
+        ]
+    }
+}

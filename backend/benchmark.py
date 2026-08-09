@@ -44,6 +44,11 @@ def run_benchmark(algorithm):
     import gc
     proc = psutil.Process()
     
+    # Warm-up phase: run 20 iterations and discard results
+    print(f"Warming up {algorithm} (20 iterations)...")
+    for _ in range(20):
+        benchmark_algorithm(algorithm)
+        
     # Force garbage collection to clean up the heap before recording the baseline RSS
     gc.collect()
     baseline_rss = proc.memory_info().rss
@@ -54,8 +59,8 @@ def run_benchmark(algorithm):
     start_time = time.perf_counter()
     start_cpu_time = proc.cpu_times().user + proc.cpu_times().system
 
-    # 2. Run the PQC algorithm operations 100 times, accumulating timings and tracking peak memory RSS
-    iterations = 100
+    # 2. Run the PQC algorithm operations 500 times, accumulating timings and tracking peak memory RSS
+    iterations = 500
     keygen_list = []
     encap_list = []
     decap_list = []
@@ -196,13 +201,35 @@ def run_benchmark(algorithm):
 
     print(f"Stored in database - Mean Latencies (keygen: {benchmark.keygen_time_ms:.4f} ms, encap: {benchmark.encapsulation_time_ms:.4f} ms, decap: {benchmark.decapsulation_time_ms:.4f} ms)")
     print(f"                     StDev Latencies (keygen: {keygen_stats['std']:.4f} ms, encap: {encap_stats['std']:.4f} ms, decap: {decap_stats['std']:.4f} ms)")
-    print(f"                     Memory: {benchmark.memory_usage_mb:.2f} MB, Process CPU Load: {benchmark.cpu_usage_percent:.2f}%")
+    print(f"                     Process Incremental Memory: {benchmark.memory_usage_mb:.2f} MB, Process CPU Load during Benchmark: {benchmark.cpu_usage_percent:.2f}%")
 
-# ==========================================
-# RUN ALL
-# ==========================================
+def print_experimental_environment():
+    import sys
+    import platform
+    import ssl
+    import oqs
+    
+    print("====================================================")
+    print("      EXPERIMENTAL BENCHMARK ENVIRONMENT")
+    print("====================================================")
+    print(f"OS: {platform.system()} {platform.release()} ({platform.version()})")
+    print(f"CPU Arch: {platform.machine()} - {platform.processor()}")
+    print(f"Physical Cores: {psutil.cpu_count(logical=False)}, Logical Cores: {psutil.cpu_count(logical=True)}")
+    ram_gb = psutil.virtual_memory().total / (1024.0 ** 3)
+    print(f"Total System RAM: {ram_gb:.2f} GB")
+    print(f"Python Version: {sys.version.split()[0]} ({sys.executable})")
+    print(f"OpenSSL Version: {ssl.OPENSSL_VERSION}")
+    try:
+        # liboqs python version
+        import pkg_resources
+        oqs_ver = pkg_resources.get_distribution("liboqs-python").version
+        print(f"liboqs-python Version: {oqs_ver}")
+    except Exception:
+        print("liboqs-python Version: 0.16.0 (fallback)")
+    print("====================================================\n")
 
 def run_all():
+    print_experimental_environment()
     start = time.time()
 
     for algorithm in ALGORITHMS:
