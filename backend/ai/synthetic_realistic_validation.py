@@ -1,6 +1,6 @@
 """
 QuantumShield-IoT
-Real-World IoT Intrusion Dataset (Edge-IIoTset & TON_IoT) Validation Script
+Synthetic Realistic IoT Telemetry & Traffic Validation Script
 """
 
 import os
@@ -21,16 +21,15 @@ from sklearn.metrics import (
 backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(backend_dir)
 
-def load_real_world_iot_dataset():
+def generate_synthetic_realistic_validation_dataset():
     """
-    Attempts to download or load a processed subset of the Edge-IIoTset and TON_IoT
-    telemetry datasets. Falls back to a high-fidelity statistical validation generator
-    representing the published empirical distributions of the Edge-IIoTset telemetry capture.
+    Generates a high-fidelity validation dataset modeling highly realistic IoT telemetry
+    and traffic behaviors. The distributions are calibrated against empirical statistics
+    published in IoT intrusion research (e.g. Edge-IIoTset, TON_IoT), incorporating
+    multivariate Gaussian shifts, log-normal network floods, and sensor dropouts.
     """
-    print("Loading real-world IoT validation telemetry dataset...")
+    print("Generating synthetic realistic validation telemetry dataset...")
     
-    # 1. We define the empirical distribution parameters published in the Edge-IIoTset & TON_IoT papers:
-    # Classes: 0: Normal, 1: DDoS, 2: Cryptojacking, 3: Thermal Tampering, 4: Reconnaissance
     np.random.seed(99)
     samples = 3000
     data = []
@@ -42,8 +41,8 @@ def load_real_world_iot_dataset():
     for _ in range(samples):
         label = np.random.choice(classes, p=probs)
         
-        if label == 0:  # Normal Smart-Home / IIoT Telemetry
-            # Edge-IIoTset standard environment: temp 22.4 ± 1.8 °C, hum 54.2 ± 3.5 %
+        if label == 0:  # Normal Telemetry
+            # Standard smart environment: temp 22.4 ± 1.8 °C, hum 54.2 ± 3.5 %
             temperature = np.random.normal(22.4, 1.8)
             humidity = np.random.normal(54.2, 3.5)
             # IIoT normal OS footprint: CPU 12.5% ± 2.2%, RAM 142.3MB ± 8.5MB
@@ -100,10 +99,10 @@ def load_real_world_iot_dataset():
         data.append([temperature, humidity, cpu_usage, memory_usage, requests_per_minute, label])
         
     df = pd.DataFrame(data, columns=["temperature", "humidity", "cpu_usage", "memory_usage", "requests_per_minute", "attack"])
-    print(f"Dataset compiled successfully. Evaluated 3,000 samples against Edge-IIoTset/TON_IoT mappings.")
+    print(f"Dataset compiled successfully. Generated {samples} validation samples.")
     return df
 
-def run_real_world_validation():
+def run_validation():
     # 1. Load trained Gradient Boosting model
     model_path = os.path.join(backend_dir, "ai/threat_model.pkl")
     if not os.path.exists(model_path):
@@ -113,7 +112,7 @@ def run_real_world_validation():
     model = joblib.load(model_path)
     
     # 2. Get dataset
-    df = load_real_world_iot_dataset()
+    df = generate_synthetic_realistic_validation_dataset()
     X = df.drop("attack", axis=1)
     y_true = df["attack"]
     
@@ -132,7 +131,7 @@ def run_real_world_validation():
     
     # 5. Format output metrics
     metrics_data = {
-        "dataset_name": "Edge-IIoTset / TON_IoT",
+        "dataset_name": "Synthetic Realistic IoT Telemetry & Traffic",
         "samples_evaluated": len(df),
         "accuracy": float(accuracy),
         "balanced_accuracy": float(balanced_acc),
@@ -147,12 +146,12 @@ def run_real_world_validation():
     }
     
     # Save to metrics file
-    out_path = os.path.join(backend_dir, "ai/real_dataset_validation_metrics.json")
+    out_path = os.path.join(backend_dir, "ai/synthetic_realistic_validation_metrics.json")
     with open(out_path, "w") as f:
         json.dump(metrics_data, f, indent=4)
         
     print("\n====================================================")
-    print("      REAL-WORLD IOT DATASET VALIDATION RESULTS")
+    print("      SYNTHETIC REALISTIC IOT DATASET VALIDATION")
     print("====================================================")
     print(f"Target Dataset: {metrics_data['dataset_name']}")
     print(f"Accuracy: {accuracy:.4%}")
@@ -163,4 +162,4 @@ def run_real_world_validation():
     print("====================================================\n")
 
 if __name__ == "__main__":
-    run_real_world_validation()
+    run_validation()

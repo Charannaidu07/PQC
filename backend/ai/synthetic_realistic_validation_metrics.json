@@ -1,5 +1,5 @@
 {
-    "dataset_name": "Edge-IIoTset / TON_IoT",
+    "dataset_name": "Synthetic Realistic IoT Telemetry & Traffic",
     "samples_evaluated": 3000,
     "accuracy": 0.9976666666666667,
     "balanced_accuracy": 0.9934272300469484,
