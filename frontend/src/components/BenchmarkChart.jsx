@@ -53,7 +53,7 @@ function BenchmarkChart({ benchmarks }) {
         label: filter === "SIG" ? "Signing Time (ms)" : filter === "KEM" ? "Encapsulation (ms)" : "Encapsulate / Sign (ms)",
         data: filteredBenchmarks.map(b => {
           const isKem = b.algorithm.startsWith("Kyber");
-          return mapValue(isKem ? b.encrypt_time_ms : b.signature_time_ms);
+          return mapValue(isKem ? b.encapsulation_time_ms : b.signature_time_ms);
         }),
         backgroundColor: "rgba(0, 230, 118, 0.4)",
         borderColor: "#00e676",
@@ -65,7 +65,7 @@ function BenchmarkChart({ benchmarks }) {
         label: filter === "SIG" ? "Verification Time (ms)" : filter === "KEM" ? "Decapsulation (ms)" : "Decapsulate / Verify (ms)",
         data: filteredBenchmarks.map(b => {
           const isKem = b.algorithm.startsWith("Kyber");
-          return mapValue(isKem ? b.decrypt_time_ms : b.verify_time_ms);
+          return mapValue(isKem ? b.decapsulation_time_ms : b.verify_time_ms);
         }),
         backgroundColor: "rgba(213, 0, 249, 0.4)",
         borderColor: "#d500f9",

@@ -118,8 +118,8 @@ function Benchmarks() {
                       <tr>
                         <th>Algorithm Standard</th>
                         <th>KeyGen Latency</th>
-                        <th>Encrypt / Sign</th>
-                        <th>Decrypt / Verify</th>
+                        <th>Encap / Sign</th>
+                        <th>Decap / Verify</th>
                         <th>Max RAM Overhead</th>
                         <th>CPU Load</th>
                         <th>Performance Score</th>
@@ -129,7 +129,7 @@ function Benchmarks() {
                       {benchmarks.map((b) => {
                         const isKem = b.algorithm.startsWith("Kyber");
                         const latencyScore = isKem 
-                          ? (b.keygen_time_ms + b.encrypt_time_ms + b.decrypt_time_ms)
+                          ? (b.keygen_time_ms + b.encapsulation_time_ms + b.decapsulation_time_ms)
                           : (b.signature_time_ms + b.verify_time_ms);
                         
                         return (
@@ -140,10 +140,10 @@ function Benchmarks() {
                             </td>
                             <td className="font-monospace text-light">{b.keygen_time_ms > 0 ? `${b.keygen_time_ms} ms` : "N/A (Signature)"}</td>
                             <td className="font-monospace text-light">
-                              {isKem ? `${b.encrypt_time_ms} ms (Enc)` : `${b.signature_time_ms.toFixed(2)} ms (Sign)`}
+                              {isKem ? `${b.encapsulation_time_ms} ms (Encap)` : `${b.signature_time_ms.toFixed(2)} ms (Sign)`}
                             </td>
                             <td className="font-monospace text-light">
-                              {isKem ? `${b.decrypt_time_ms} ms (Dec)` : `${b.verify_time_ms.toFixed(2)} ms (Verify)`}
+                              {isKem ? `${b.decapsulation_time_ms} ms (Decap)` : `${b.verify_time_ms.toFixed(2)} ms (Verify)`}
                             </td>
                             <td className="font-monospace text-info">{b.memory_usage_mb.toFixed(1)} MB</td>
                             <td>

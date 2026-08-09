@@ -217,12 +217,12 @@ class BenchmarkResult(Base):
         default=0.0
     )
 
-    encrypt_time_ms = Column(
+    encapsulation_time_ms = Column(
         Float,
         default=0.0
     )
 
-    decrypt_time_ms = Column(
+    decapsulation_time_ms = Column(
         Float,
         default=0.0
     )

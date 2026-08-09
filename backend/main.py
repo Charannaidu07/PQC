@@ -258,8 +258,8 @@ def get_stats(
 
     # Average Benchmark Metrics
     avg_keygen_ms = db.query(func.avg(BenchmarkResult.keygen_time_ms)).scalar() or 0
-    avg_encrypt_ms = db.query(func.avg(BenchmarkResult.encrypt_time_ms)).scalar() or 0
-    avg_decrypt_ms = db.query(func.avg(BenchmarkResult.decrypt_time_ms)).scalar() or 0
+    avg_encapsulation_ms = db.query(func.avg(BenchmarkResult.encapsulation_time_ms)).scalar() or 0
+    avg_decapsulation_ms = db.query(func.avg(BenchmarkResult.decapsulation_time_ms)).scalar() or 0
     avg_pqc_mem_mb = db.query(func.avg(BenchmarkResult.memory_usage_mb)).scalar() or 0
 
     threat_rate = 0
@@ -297,8 +297,8 @@ def get_stats(
         "avg_memory": round(float(avg_memory), 2),
         "avg_battery": round(float(avg_battery), 2),
         "avg_keygen_ms": round(float(avg_keygen_ms), 4),
-        "avg_encrypt_ms": round(float(avg_encrypt_ms), 4),
-        "avg_decrypt_ms": round(float(avg_decrypt_ms), 4),
+        "avg_encapsulation_ms": round(float(avg_encapsulation_ms), 4),
+        "avg_decapsulation_ms": round(float(avg_decapsulation_ms), 4),
         "avg_pqc_mem_mb": round(float(avg_pqc_mem_mb), 2)
     }
 

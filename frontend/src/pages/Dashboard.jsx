@@ -191,19 +191,19 @@ function Dashboard() {
                 <div>
                   <div className="d-flex justify-content-between align-items-center mb-1" style={{ fontSize: "0.85rem" }}>
                     <span>Encapsulation</span>
-                    <strong className="text-success">{stats.avg_encrypt_ms || 0} ms</strong>
+                    <strong className="text-success">{stats.avg_encapsulation_ms || 0} ms</strong>
                   </div>
                   <div className="progress bg-dark bg-opacity-50" style={{ height: "4px" }}>
-                    <div className="progress-bar bg-success" style={{ width: `${Math.min(100, (stats.avg_encrypt_ms || 0) * 100)}%` }} />
+                    <div className="progress-bar bg-success" style={{ width: `${Math.min(100, (stats.avg_encapsulation_ms || 0) * 100)}%` }} />
                   </div>
                 </div>
                 <div>
                   <div className="d-flex justify-content-between align-items-center mb-1" style={{ fontSize: "0.85rem" }}>
                     <span>Decapsulation</span>
-                    <strong className="text-warning">{stats.avg_decrypt_ms || 0} ms</strong>
+                    <strong className="text-warning">{stats.avg_decapsulation_ms || 0} ms</strong>
                   </div>
                   <div className="progress bg-dark bg-opacity-50" style={{ height: "4px" }}>
-                    <div className="progress-bar bg-warning" style={{ width: `${Math.min(100, (stats.avg_decrypt_ms || 0) * 100)}%` }} />
+                    <div className="progress-bar bg-warning" style={{ width: `${Math.min(100, (stats.avg_decapsulation_ms || 0) * 100)}%` }} />
                   </div>
                 </div>
               </div>
