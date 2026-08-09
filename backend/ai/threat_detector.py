@@ -1,6 +1,6 @@
 """
 QuantumShield-IoT
-Real-Time AI Threat Detector
+Real-Time AI Multi-Class Threat Detector
 """
 
 import os
@@ -27,7 +27,7 @@ from database import (
 )
 
 # -----------------------------------------
-# LOAD MODEL
+# LOAD MODEL & MAPS
 # -----------------------------------------
 
 MODEL_PATH = os.path.join(
@@ -35,13 +35,16 @@ MODEL_PATH = os.path.join(
     "threat_model.pkl"
 )
 
-model = joblib.load(
-    MODEL_PATH
-)
+model = joblib.load(MODEL_PATH)
+print("Multi-Class Threat Detection Model Loaded")
 
-print(
-    "Threat Detection Model Loaded"
-)
+THREAT_MAP = {
+    0: "Normal",
+    1: "DDoS",
+    2: "Cryptojacking",
+    3: "Thermal Tampering",
+    4: "Reconnaissance"
+}
 
 # -----------------------------------------
 # DATABASE
@@ -54,38 +57,13 @@ db = SessionLocal()
 # -----------------------------------------
 
 def detect_threat(payload):
-
     try:
-
-        temperature = payload.get(
-            "temperature",
-            0
-        )
-
-        humidity = payload.get(
-            "humidity",
-            0
-        )
-
-        cpu_usage = payload.get(
-            "cpu_usage",
-            0
-        )
-
-        memory_usage = payload.get(
-            "memory_usage",
-            0
-        )
-
-        requests_per_minute = payload.get(
-            "requests_per_minute",
-            20
-        )
-
-        device_id = payload.get(
-            "device_id",
-            "unknown"
-        )
+        temperature = payload.get("temperature", 0)
+        humidity = payload.get("humidity", 0)
+        cpu_usage = payload.get("cpu_usage", 0)
+        memory_usage = payload.get("memory_usage", 0)
+        requests_per_minute = payload.get("requests_per_minute", 20)
+        device_id = payload.get("device_id", "unknown")
 
         features = pd.DataFrame(
             [[
@@ -104,102 +82,57 @@ def detect_threat(payload):
             ]
         )
 
-        prediction = model.predict(
-            features
-        )[0]
+        prediction = model.predict(features)[0]
+        probability = model.predict_proba(features)[0]
+        confidence = float(max(probability))
 
-        probability = (
-            model.predict_proba(
-                features
-            )[0]
-        )
-
-        confidence = float(
-            max(probability)
-        )
-
+        # Prediction 0 is Normal operation
         if prediction == 0:
-
             return {
-                "device_id":
-                    device_id,
-
-                "threat":
-                    False,
-
-                "confidence":
-                    confidence
+                "device_id": device_id,
+                "threat": False,
+                "confidence": confidence,
+                "threat_type": "Normal"
             }
 
+        # Handle severity logic
         severity = "LOW"
-
         if confidence > 0.95:
-
             severity = "HIGH"
-
         elif confidence > 0.80:
-
             severity = "MEDIUM"
 
-        threat_type = payload.get("attack_type", "AI_DETECTED_ATTACK")
+        # Dynamically predict threat type using AI classification result
+        threat_type = THREAT_MAP.get(prediction, "AI_DETECTED_ATTACK")
 
         threat = ThreatLog(
-
             device_id=device_id,
-
             threat_type=threat_type,
-
             confidence=confidence,
-
             severity=severity,
-
             temperature=temperature,
-
             humidity=humidity,
-
             cpu_usage=cpu_usage,
-
             memory_usage=memory_usage,
-
-            requests_per_minute=
-                requests_per_minute,
-
+            requests_per_minute=requests_per_minute,
             blocked=(severity == "HIGH")
         )
 
         db.add(threat)
-
         db.commit()
 
-        print(
-            f"Threat Detected "
-            f"[{device_id}] "
-            f"Confidence="
-            f"{confidence:.2f}"
-        )
+        print(f"Threat Detected [{device_id}] Class={threat_type} (Conf={confidence*100:.1f}%)")
 
         return {
-
-            "device_id":
-                device_id,
-
-            "threat":
-                True,
-
-            "confidence":
-                confidence,
-
-            "severity":
-                severity
+            "device_id": device_id,
+            "threat": True,
+            "confidence": confidence,
+            "severity": severity,
+            "threat_type": threat_type
         }
 
     except Exception as e:
-
-        print(
-            f"Detection Error: {e}"
-        )
-
+        print(f"Detection Error: {e}")
         return {
-            "error":
-                str(e)
+            "error": str(e)
         }

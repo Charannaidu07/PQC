@@ -1,12 +1,12 @@
 """
 QuantumShield-IoT
-AI Advanced Threat Detection Model Trainer
+AI Multi-Class Threat Detection Model Trainer
 """
 
 import pandas as pd
 import numpy as np
 from sklearn.ensemble import GradientBoostingClassifier
-from sklearn.model_selection import train_test_split, GridSearchCV
+from sklearn.model_selection import train_test_split
 from sklearn.metrics import (
     accuracy_score,
     classification_report,
@@ -17,37 +17,51 @@ import joblib
 # ==========================================
 # DATASET GENERATION
 # ==========================================
-def generate_dataset(samples=12000):
+def generate_dataset(samples=15000):
     data = []
+    
+    # Probabilities for classes:
+    # 0: Normal (70%)
+    # 1: DDoS (10%)
+    # 2: Cryptojacking (8%)
+    # 3: Thermal Tampering (6%)
+    # 4: Reconnaissance (6%)
+    classes = [0, 1, 2, 3, 4]
+    probs = [0.70, 0.10, 0.08, 0.06, 0.06]
+    
     for _ in range(samples):
-        # We generate three classes of data to make it realistic:
-        # 0: Normal operation
-        # 1: DDoS / High Traffic Attack
-        # 2: Hardware/Thermal Anomaly (Tampering)
-        
-        scenario = np.random.choice([0, 1, 2], p=[0.75, 0.15, 0.10])
+        scenario = np.random.choice(classes, p=probs)
         
         if scenario == 0:  # Normal
-            temperature = np.random.uniform(20, 38)
+            temperature = np.random.uniform(20, 35)
             humidity = np.random.uniform(30, 80)
-            cpu_usage = np.random.uniform(5, 45)
-            memory_usage = np.random.uniform(100, 750)
-            requests_per_minute = np.random.uniform(5, 60)
-            attack = 0
-        elif scenario == 1:  # DDoS / Network Attack
+            cpu_usage = np.random.uniform(5, 30)
+            memory_usage = np.random.uniform(100, 300)
+            requests_per_minute = np.random.uniform(5, 30)
+        elif scenario == 1:  # DDoS
             temperature = np.random.uniform(25, 45)
             humidity = np.random.uniform(30, 80)
             cpu_usage = np.random.uniform(75, 100)
-            memory_usage = np.random.uniform(900, 2500)
-            requests_per_minute = np.random.uniform(800, 6000)
-            attack = 1
-        else:  # Thermal / Hardware Tampering Anomaly
-            temperature = np.random.uniform(70, 105)
-            humidity = np.random.uniform(10, 40)
-            cpu_usage = np.random.uniform(40, 90)
-            memory_usage = np.random.uniform(600, 1500)
-            requests_per_minute = np.random.uniform(10, 150)
-            attack = 1  # Labeled as attack/anomaly
+            memory_usage = np.random.uniform(500, 1500)
+            requests_per_minute = np.random.uniform(1000, 5000)
+        elif scenario == 2:  # Cryptojacking
+            temperature = np.random.uniform(35, 55)
+            humidity = np.random.uniform(30, 80)
+            cpu_usage = np.random.uniform(90, 100)
+            memory_usage = np.random.uniform(800, 2000)
+            requests_per_minute = np.random.uniform(10, 50)
+        elif scenario == 3:  # Thermal Tampering
+            temperature = np.random.uniform(75, 110)
+            humidity = np.random.uniform(5, 30)
+            cpu_usage = np.random.uniform(10, 40)
+            memory_usage = np.random.uniform(100, 300)
+            requests_per_minute = np.random.uniform(5, 30)
+        else:  # Reconnaissance
+            temperature = np.random.uniform(20, 35)
+            humidity = np.random.uniform(30, 80)
+            cpu_usage = np.random.uniform(15, 45)
+            memory_usage = np.random.uniform(150, 450)
+            requests_per_minute = np.random.uniform(150, 400)
             
         data.append([
             temperature,
@@ -55,7 +69,7 @@ def generate_dataset(samples=12000):
             cpu_usage,
             memory_usage,
             requests_per_minute,
-            attack
+            scenario
         ])
 
     columns = [
@@ -72,8 +86,8 @@ def generate_dataset(samples=12000):
 # MAIN
 # ==========================================
 def main():
-    print("\nGenerating Advanced Security Telemetry Dataset...")
-    df = generate_dataset(samples=12000)
+    print("\nGenerating Multi-Class Security Telemetry Dataset...")
+    df = generate_dataset(samples=15000)
     df.to_csv("attack_dataset.csv", index=False)
     print("Dataset Saved to attack_dataset.csv")
 
@@ -84,13 +98,11 @@ def main():
         X, y, test_size=0.2, random_state=42, stratify=y
     )
 
-    print("\nTraining Advanced Gradient Boosting Threat Classifier...")
-    # Using Gradient Boosting Classifier (better gradient updates, handles non-linear boundaries cleanly)
+    print("\nTraining Multi-Class Gradient Boosting Threat Classifier...")
     model = GradientBoostingClassifier(
-        n_estimators=150,
-        learning_rate=0.08,
-        max_depth=4,
-        subsample=0.85,
+        n_estimators=100,
+        learning_rate=0.1,
+        max_depth=3,
         random_state=42
     )
 
@@ -99,8 +111,10 @@ def main():
     accuracy = accuracy_score(y_test, predictions)
 
     print(f"\nModel Accuracy: {accuracy:.4f}")
+    
+    target_names = ["Normal", "DDoS", "Cryptojacking", "Thermal Tampering", "Reconnaissance"]
     print("\nClassification Report:")
-    print(classification_report(y_test, predictions, target_names=["Normal", "Anomaly/Attack"]))
+    print(classification_report(y_test, predictions, target_names=target_names))
 
     print("\nConfusion Matrix:")
     print(confusion_matrix(y_test, predictions))
@@ -113,7 +127,7 @@ def main():
         print(f" - {f}: {imp:.4%}")
 
     joblib.dump(model, "threat_model.pkl")
-    print("\nOptimized Threat Detection Model Saved: threat_model.pkl")
+    print("\nOptimized Multi-Class Threat Detection Model Saved: threat_model.pkl")
 
 if __name__ == "__main__":
     main()
