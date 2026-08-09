@@ -4,16 +4,40 @@ function DeviceTable({ devices }) {
   // Helper to color PQC algorithms dynamically
   const getPqcBadgeClass = (algo) => {
     switch (algo) {
+      case "ML-KEM-512":
       case "Kyber512":
         return "badge border border-info border-opacity-50 text-info bg-info bg-opacity-10";
+      case "ML-KEM-768":
       case "Kyber768":
         return "badge border border-success border-opacity-50 text-success bg-success bg-opacity-10";
+      case "ML-DSA-44":
       case "Dilithium2":
         return "badge border border-magenta border-opacity-50 text-magenta bg-magenta bg-opacity-10";
+      case "FN-DSA-512":
       case "Falcon512":
         return "badge border border-danger border-opacity-50 text-danger bg-danger bg-opacity-10";
       default:
         return "badge border border-warning border-opacity-50 text-warning bg-warning bg-opacity-10";
+    }
+  };
+
+  // Helper to format algorithm names for standardized display
+  const formatAlgoName = (algo) => {
+    switch (algo) {
+      case "ML-KEM-512":
+      case "Kyber512":
+        return "ML-KEM-512 (Kyber512)";
+      case "ML-KEM-768":
+      case "Kyber768":
+        return "ML-KEM-768 (Kyber768)";
+      case "ML-DSA-44":
+      case "Dilithium2":
+        return "ML-DSA-44 (Dilithium2)";
+      case "FN-DSA-512":
+      case "Falcon512":
+        return "FN-DSA-512 (Falcon512)";
+      default:
+        return algo;
     }
   };
 
@@ -79,10 +103,10 @@ function DeviceTable({ devices }) {
               <td>
                 <div className="d-flex flex-column gap-1">
                   <span className={getPqcBadgeClass(device.selected_kem)} style={{ fontSize: "0.7rem", width: "fit-content" }}>
-                    KEM: {device.selected_kem}
+                    KEM: {formatAlgoName(device.selected_kem)}
                   </span>
                   <span className={getPqcBadgeClass(device.selected_signature)} style={{ fontSize: "0.7rem", width: "fit-content" }}>
-                    SIG: {device.selected_signature}
+                    SIG: {formatAlgoName(device.selected_signature)}
                   </span>
                 </div>
               </td>

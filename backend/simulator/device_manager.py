@@ -109,8 +109,20 @@ class VirtualDevice:
         self.attack_type = None  # "DDoS", "Cryptojacking", "Thermal Tampering"
         self.attack_duration = 0
         self.mitigation_duration = 0
-        self.selected_kem = "Kyber512"
-        self.selected_signature = "Dilithium2"
+        self.selected_kem = "ML-KEM-512"
+        self.selected_signature = "ML-DSA-44"
+        self.sig_keys = {}
+        self._init_keys()
+
+    def _init_keys(self):
+        """Generates long-term signature keypairs for both ML-DSA-44 and FN-DSA-512."""
+        try:
+            from pqc.pqc_oqs import PQCManager
+            pqc = PQCManager()
+            for sig in ["ML-DSA-44", "FN-DSA-512"]:
+                self.sig_keys[sig] = pqc.generate_keypair(sig)
+        except Exception as e:
+            logger.error(f"Failed to generate signature keypairs for device {self.device_id}: {e}")
         
     def trigger_attack(self, attack_type: str):
         """Manually trigger an attack on this device"""
@@ -147,11 +159,18 @@ class VirtualDevice:
             session = SessionLocal()
             dev = session.query(Device).filter(Device.device_id == self.device_id).first()
             if dev:
-                self.selected_kem = dev.selected_kem or "Kyber512"
-                self.selected_signature = dev.selected_signature or "Dilithium2"
+                self.selected_kem = dev.selected_kem or "ML-KEM-512"
+                self.selected_signature = dev.selected_signature or "ML-DSA-44"
+                
+                # Check and register signature public keys in DB if missing
+                if not dev.sig_public_key_dilithium2 or not dev.sig_public_key_falcon512:
+                    if self.sig_keys:
+                        dev.sig_public_key_dilithium2 = self.sig_keys.get("ML-DSA-44", {}).get("public_key")
+                        dev.sig_public_key_falcon512 = self.sig_keys.get("FN-DSA-512", {}).get("public_key")
+                        session.commit()
             session.close()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.error(f"Error syncing device keys to database: {e}")
             
         # 2. State machine transitions and values
         if self.state == "NORMAL":
@@ -252,10 +271,10 @@ class VirtualDevice:
         
         # 4. Battery drain model with PQC overhead
         pqc_drain_rates = {
-            "Kyber512": 0.001,
-            "Kyber768": 0.003,
-            "Falcon512": 0.005,
-            "Dilithium2": 0.015
+            "ML-KEM-512": 0.001,
+            "ML-KEM-768": 0.003,
+            "FN-DSA-512": 0.005,
+            "ML-DSA-44": 0.015
         }
         pqc_overhead = pqc_drain_rates.get(self.selected_kem, 0.001) + pqc_drain_rates.get(self.selected_signature, 0.001)
         
@@ -315,7 +334,32 @@ async def device_loop(device: VirtualDevice, mqtt_client: MQTTClient):
                 await asyncio.sleep(PUBLISH_INTERVAL)
                 continue
                 
-            success = mqtt_client.publish(MQTT_TOPIC, json.dumps(payload))
+            # Encrypt and sign payload using selected PQC algorithms
+            payload_to_send = payload
+            try:
+                from pqc.pqc_secure_channel import encrypt_and_sign_payload
+                sig_algo = device.selected_signature or "ML-DSA-44"
+                kem_algo = device.selected_kem or "ML-KEM-512"
+                
+                # Ensure keys are loaded
+                if sig_algo in device.sig_keys:
+                    sig_private_key = device.sig_keys[sig_algo]["private_key"]
+                    secured_payload = encrypt_and_sign_payload(
+                        device_id=device.device_id,
+                        payload_dict=payload,
+                        kem_algo=kem_algo,
+                        sig_algo=sig_algo,
+                        device_sig_private_key_hex=sig_private_key
+                    )
+                    # Attach public key for signature verification (TOFU support)
+                    secured_payload["sig_public_key"] = device.sig_keys[sig_algo]["public_key"]
+                    payload_to_send = secured_payload
+                else:
+                    logger.warning(f"Device {device.device_id} missing signature keys for algorithm: {sig_algo}")
+            except Exception as e:
+                logger.error(f"Failed to encrypt telemetry for device {device.device_id}: {e}")
+                
+            success = mqtt_client.publish(MQTT_TOPIC, json.dumps(payload_to_send))
             await asyncio.sleep(PUBLISH_INTERVAL)
         except asyncio.CancelledError:
             break

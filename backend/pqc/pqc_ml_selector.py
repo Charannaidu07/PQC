@@ -22,18 +22,52 @@ SIG_MODEL_FILE = os.path.join(MODEL_DIR, "sig_selector.pkl")
 # ==========================================
 
 KEMS = {
-    0: "Kyber512",
-    1: "Kyber768"
+    0: "ML-KEM-512",
+    1: "ML-KEM-768"
 }
 
 SIGNATURES = {
-    0: "Dilithium2",
-    1: "Falcon512"
+    0: "ML-DSA-44",
+    1: "FN-DSA-512"
 }
 
 # ==========================================
 # DATASET GENERATION
 # ==========================================
+
+def compute_optimal_kem(cpu, ram, battery, threat_score):
+    """
+    Computes the utility-maximizing KEM algorithm:
+    0: Kyber512, 1: Kyber768
+    """
+    if ram < 512:
+        return 0  # Severe memory limit override
+        
+    w_security = 5.0 * threat_score
+    w_battery = 0.05 * (100.0 - battery)
+    w_bandwidth = 0.2
+
+    # Utility = Security_Benefit - (Battery_Cost + Bandwidth_Cost)
+    u_512 = (w_security * 1.0) - (w_battery * 1.0 + w_bandwidth * 1.568)
+    u_768 = (w_security * 3.0) - (w_battery * 3.0 + w_bandwidth * 2.272)
+    
+    return 1 if u_768 > u_512 else 0
+
+def compute_optimal_sig(cpu, ram, battery, threat_score):
+    """
+    Computes the utility-maximizing Digital Signature algorithm:
+    0: Dilithium2, 1: Falcon512
+    """
+    w_security = 5.0 * threat_score
+    w_battery = 0.05 * (100.0 - battery)
+    w_cpu = 0.02 * cpu
+    w_bandwidth = 0.2
+
+    # Utility = Security_Benefit - (Battery_Cost + CPU_Cost + Bandwidth_Cost)
+    u_dil = (w_security * 2.0) - (w_battery * 3.0 + w_cpu * 1.0 + w_bandwidth * 3.732)
+    u_fal = (w_security * 1.0) - (w_battery * 1.0 + w_cpu * 5.0 + w_bandwidth * 1.563)
+    
+    return 1 if u_fal > u_dil else 0
 
 def generate_dataset(samples=5000):
     rows = []
@@ -43,28 +77,8 @@ def generate_dataset(samples=5000):
         battery = random.uniform(1, 100)
         threat_score = random.uniform(0, 1)
 
-        # ----------------------------------
-        # KEM SELECTION RULES
-        # ----------------------------------
-        # For lower resource states, select Kyber512 (ML-KEM-512) for lower footprint.
-        # Otherwise select Kyber768 (ML-KEM-768) for standard protection.
-        if battery < 20 or ram < 512:
-            kem_label = 0  # Kyber512
-        else:
-            kem_label = 1  # Kyber768
-
-        # ----------------------------------
-        # SIGNATURE SELECTION RULES
-        # ----------------------------------
-        # If threat level is high, use Dilithium2 (ML-DSA-44) as standardized baseline.
-        # If CPU constraint is severe, use Falcon512 (FN-DSA) for lower bandwidth/computation signature verify overhead.
-        # Otherwise default to Dilithium2.
-        if threat_score > 0.70:
-            sig_label = 0  # Dilithium2
-        elif cpu > 75:
-            sig_label = 1  # Falcon512
-        else:
-            sig_label = 0  # Dilithium2
+        kem_label = compute_optimal_kem(cpu, ram, battery, threat_score)
+        sig_label = compute_optimal_sig(cpu, ram, battery, threat_score)
 
         rows.append([cpu, ram, battery, threat_score, kem_label, sig_label])
 
@@ -161,24 +175,18 @@ def select_algorithm(
             pred_kem = kem_model.predict(df_features)[0]
             pred_sig = sig_model.predict(df_features)[0]
             
-            selected_kem = KEMS.get(pred_kem, "Kyber512")
-            selected_sig = SIGNATURES.get(pred_sig, "Dilithium2")
+            selected_kem = KEMS.get(pred_kem, "ML-KEM-512")
+            selected_sig = SIGNATURES.get(pred_sig, "ML-DSA-44")
             return selected_kem, selected_sig
         except Exception as e:
             print(f"PQC selection prediction error: {e}")
 
-    # Fallback to rule-based logic
-    if battery_val < 20 or memory_val < 512:
-        selected_kem = "Kyber512"
-    else:
-        selected_kem = "Kyber768"
-
-    if threat_val > 0.70:
-        selected_sig = "Dilithium2"
-    elif cpu_val > 75:
-        selected_sig = "Falcon512"
-    else:
-        selected_sig = "Dilithium2"
+    # Fallback to utility optimization logic
+    pred_kem = compute_optimal_kem(cpu_val, memory_val, battery_val, threat_val)
+    pred_sig = compute_optimal_sig(cpu_val, memory_val, battery_val, threat_val)
+    
+    selected_kem = KEMS.get(pred_kem, "ML-KEM-512")
+    selected_sig = SIGNATURES.get(pred_sig, "ML-DSA-44")
 
     return selected_kem, selected_sig
 

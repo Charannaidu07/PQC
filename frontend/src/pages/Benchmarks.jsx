@@ -83,7 +83,7 @@ function Benchmarks() {
                   <div className="p-3 bg-dark bg-opacity-20 border border-secondary border-opacity-10 rounded h-100">
                     <span className="badge bg-info bg-opacity-10 text-info border border-info border-opacity-25 mb-2">Key Encapsulation (KEM)</span>
                     <p className="small text-secondary mb-0">
-                      Standard algorithms like <strong>Kyber512</strong> and <strong>Kyber768</strong> are used for secure key exchanges, establishing shared secret channels over unsecured pathways.
+                      Standard algorithms like <strong>ML-KEM-512 (Kyber512)</strong> and <strong>ML-KEM-768 (Kyber768)</strong> are used for secure key exchanges, establishing shared secret channels over unsecured pathways.
                     </p>
                   </div>
                 </div>
@@ -91,7 +91,7 @@ function Benchmarks() {
                   <div className="p-3 bg-dark bg-opacity-20 border border-secondary border-opacity-10 rounded h-100">
                     <span className="badge bg-magenta bg-opacity-10 text-magenta border border-magenta border-opacity-25 mb-2">Digital Signatures (Sig)</span>
                     <p className="small text-secondary mb-0">
-                      Signature algorithms like <strong>Dilithium2</strong> and <strong>Falcon512</strong> verify endpoint device identity and message origin authentication, vital to prevent firmware tampering.
+                      Signature algorithms like <strong>ML-DSA-44 (Dilithium2)</strong> and <strong>FN-DSA-512 (Falcon512)</strong> verify endpoint device identity and message origin authentication, vital to prevent firmware tampering.
                     </p>
                   </div>
                 </div>
@@ -116,27 +116,38 @@ function Benchmarks() {
                   <table className="table">
                     <thead>
                       <tr>
-                        <th>Algorithm Standard</th>
+                        <th>Algorithm</th>
                         <th>KeyGen Latency</th>
                         <th>Encap / Sign</th>
                         <th>Decap / Verify</th>
+                        <th>Key Sizes (PK / SK)</th>
+                        <th>Payload Size</th>
                         <th>Max RAM Overhead</th>
-                        <th>CPU Load</th>
+                        <th title="Process CPU utilization during PQC benchmark execution">Process CPU Load</th>
                         <th>Performance Score</th>
                       </tr>
                     </thead>
                     <tbody>
                       {benchmarks.map((b) => {
-                        const isKem = b.algorithm.startsWith("Kyber");
+                        const isKem = b.algorithm.startsWith("Kyber") || b.algorithm.startsWith("ML-KEM");
                         const latencyScore = isKem 
                           ? (b.keygen_time_ms + b.encapsulation_time_ms + b.decapsulation_time_ms)
                           : (b.signature_time_ms + b.verify_time_ms);
+                        
+                        // Helper to format algorithm standard display name
+                        const formatAlgoName = (algo) => {
+                          if (algo === "ML-KEM-512" || algo === "Kyber512") return "ML-KEM-512 (Kyber512)";
+                          if (algo === "ML-KEM-768" || algo === "Kyber768") return "ML-KEM-768 (Kyber768)";
+                          if (algo === "ML-DSA-44" || algo === "Dilithium2") return "ML-DSA-44 (Dilithium2)";
+                          if (algo === "FN-DSA-512" || algo === "Falcon512") return "FN-DSA-512 (Falcon512)";
+                          return algo;
+                        };
                         
                         return (
                           <tr key={b.id}>
                             <td className="fw-bold text-white font-monospace">
                               <span className={`me-2 status-glow-${isKem ? 'online' : 'offline'}`} />
-                              {b.algorithm}
+                              {formatAlgoName(b.algorithm)}
                             </td>
                             <td className="font-monospace text-light">{b.keygen_time_ms > 0 ? `${b.keygen_time_ms} ms` : "N/A (Signature)"}</td>
                             <td className="font-monospace text-light">
@@ -145,8 +156,16 @@ function Benchmarks() {
                             <td className="font-monospace text-light">
                               {isKem ? `${b.decapsulation_time_ms} ms (Decap)` : `${b.verify_time_ms.toFixed(2)} ms (Verify)`}
                             </td>
-                            <td className="font-monospace text-info">{b.memory_usage_mb.toFixed(1)} MB</td>
-                            <td>
+                            <td className="font-monospace text-light text-nowrap">
+                              {b.pub_key_size_bytes > 0 ? `${b.pub_key_size_bytes} B / ${b.secret_key_size_bytes} B` : "N/A"}
+                            </td>
+                            <td className="font-monospace text-light text-nowrap">
+                              {isKem 
+                                ? `${b.ciphertext_size_bytes} B (Ciphertext)` 
+                                : `${b.signature_size_bytes} B (Signature)`}
+                            </td>
+                            <td className="font-monospace text-info">{b.memory_usage_mb.toFixed(2)} MB</td>
+                            <td title="Process CPU utilization during benchmark execution">
                               <span className={`badge bg-${b.cpu_usage_percent > 50 ? 'danger' : 'success'} bg-opacity-10 text-${b.cpu_usage_percent > 50 ? 'danger' : 'success'} border border-${b.cpu_usage_percent > 50 ? 'danger' : 'success'} border-opacity-25`}>
                                 {b.cpu_usage_percent.toFixed(1)}%
                               </span>

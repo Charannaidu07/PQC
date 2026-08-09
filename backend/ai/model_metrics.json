@@ -1,75 +1,75 @@
 {
-    "accuracy": 0.999,
-    "balanced_accuracy": 0.9979356867518767,
-    "precision": 0.9990037981841264,
-    "recall": 0.999,
-    "f1_score": 0.9989999007719336,
-    "macro_precision": 0.9969146379111502,
-    "macro_recall": 0.9979356867518767,
-    "macro_f1_score": 0.9974198775872841,
-    "roc_auc": 0.9999136406433357,
-    "macro_roc_auc": 0.9998366707809969,
+    "accuracy": 0.9886666666666667,
+    "balanced_accuracy": 0.9816535026266147,
+    "precision": 0.9889029970881432,
+    "recall": 0.9886666666666667,
+    "f1_score": 0.9887010755405459,
+    "macro_precision": 0.9773870079484211,
+    "macro_recall": 0.9816535026266147,
+    "macro_f1_score": 0.9792782205373154,
+    "roc_auc": 0.9995805817348671,
+    "macro_roc_auc": 0.9996873065668943,
     "per_class_auc": {
-        "Normal": 1.0,
-        "DDoS": 0.9991921451652995,
-        "Cryptojacking": 0.999991208739685,
-        "Thermal Tampering": 0.9999999999999999,
-        "Reconnaissance": 1.0
+        "Normal": 0.9995084354704041,
+        "DDoS": 0.9998414200307645,
+        "Cryptojacking": 0.9999196983035523,
+        "Thermal Tampering": 0.9993390922802687,
+        "Reconnaissance": 0.9998278867494812
     },
     "per_class_f1": {
-        "Normal": 1.0,
-        "DDoS": 0.9968454258675079,
-        "Cryptojacking": 0.9959677419354839,
-        "Thermal Tampering": 0.9968051118210862,
-        "Reconnaissance": 0.9974811083123426
+        "Normal": 0.9933491686460808,
+        "DDoS": 0.9928057553956835,
+        "Cryptojacking": 0.9769392033542977,
+        "Thermal Tampering": 0.9746192893401016,
+        "Reconnaissance": 0.9586776859504132
     },
     "best_params": {
-        "learning_rate": 0.05,
-        "max_depth": 4,
+        "learning_rate": 0.1,
+        "max_depth": 3,
         "n_estimators": 100
     },
     "confusion_matrix": [
         [
-            2080,
+            2091,
             0,
             0,
-            0,
-            0
+            7,
+            8
         ],
         [
             0,
-            316,
+            276,
+            0,
+            0,
+            2
+        ],
+        [
+            9,
+            0,
+            233,
+            0,
+            2
+        ],
+        [
+            3,
+            0,
+            0,
+            192,
+            0
+        ],
+        [
             1,
-            0,
-            1
-        ],
-        [
+            2,
             0,
             0,
-            247,
-            1,
-            0
-        ],
-        [
-            0,
-            0,
-            0,
-            156,
-            0
-        ],
-        [
-            0,
-            0,
-            0,
-            0,
-            198
+            174
         ]
     ],
     "feature_importances": {
-        "temperature": 0.19718432933441207,
-        "humidity": 0.004100411742563584,
-        "cpu_usage": 0.43433559808307864,
-        "memory_usage": 0.04065187719504057,
-        "requests_per_minute": 0.3237277836449053
+        "temperature": 0.21666028332989198,
+        "humidity": 0.0039935069098525075,
+        "cpu_usage": 0.012604230892143197,
+        "memory_usage": 0.48400094975954877,
+        "requests_per_minute": 0.28274102910856364
     }
 }

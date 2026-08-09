@@ -15,7 +15,14 @@ Chart.register(
 
 function PQCDistribution({ data = [] }) {
   const chartData = {
-    labels: data.map(d => d.algorithm),
+    labels: data.map(d => {
+      const algo = d.algorithm;
+      if (algo === "ML-KEM-512" || algo === "Kyber512") return "ML-KEM-512 (Kyber512)";
+      if (algo === "ML-KEM-768" || algo === "Kyber768") return "ML-KEM-768 (Kyber768)";
+      if (algo === "ML-DSA-44" || algo === "Dilithium2") return "ML-DSA-44 (Dilithium2)";
+      if (algo === "FN-DSA-512" || algo === "Falcon512") return "FN-DSA-512 (Falcon512)";
+      return algo;
+    }),
     datasets: [
       {
         data: data.map(d => d.count),

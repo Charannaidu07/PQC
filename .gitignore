@@ -18,6 +18,7 @@ quantumshield.db*
 attack_dataset.csv
 threat_model.pkl
 pqc_selector.pkl
+bridge_keys.json
 
 # Frontend
 node_modules/

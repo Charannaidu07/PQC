@@ -20,7 +20,7 @@ Chart.register(
 );
 
 function KeySizeChart() {
-  const algorithms = ["Kyber512", "Kyber768", "Dilithium2", "Falcon512", "SPHINCS+"];
+  const algorithms = ["ML-KEM-512 (Kyber512)", "ML-KEM-768 (Kyber768)", "ML-DSA-44 (Dilithium2)", "FN-DSA-512 (Falcon512)", "SPHINCS+"];
   
   const data = {
     labels: algorithms,

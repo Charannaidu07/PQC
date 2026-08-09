@@ -26,7 +26,7 @@ np.random.seed(42)
 random.seed(42)
 
 # ==========================================
-# TRAINING DATASET GENERATION (BASELINE ENVIRONMENT)
+# TRAINING DATASET GENERATION (BASELINE ENVIRONMENT WITH REALISTIC OVERLAP & NOISE)
 # ==========================================
 def generate_training_dataset(samples=12000):
     data = []
@@ -36,39 +36,77 @@ def generate_training_dataset(samples=12000):
     for _ in range(samples):
         scenario = np.random.choice(classes, p=probs)
         
+        # 1. Base Distributions with Spikes & Idles (Mixture Models)
         if scenario == 0:  # Normal
             temperature = np.random.normal(25.0, 3.0)
             humidity = np.random.normal(55.0, 8.0)
-            cpu_usage = np.random.normal(15.0, 5.0)
+            
+            # Mixture model: 95% low CPU, 5% spike CPU
+            if np.random.rand() < 0.05:
+                cpu_usage = np.random.normal(75.0, 10.0)
+            else:
+                cpu_usage = np.random.normal(15.0, 5.0)
+                
             memory_usage = np.random.normal(180.0, 25.0)
-            requests_per_minute = np.random.normal(15.0, 4.0)
+            # Log-normal network traffic requests/minute
+            requests_per_minute = np.random.lognormal(np.log(15.0), 0.4)
+            
         elif scenario == 1:  # DDoS
             temperature = np.random.normal(32.0, 4.0)
             humidity = np.random.normal(55.0, 8.0)
-            cpu_usage = np.random.normal(85.0, 7.0)
+            
+            # Mixture model: 90% heavy CPU load, 10% waiting/idle phase
+            if np.random.rand() < 0.10:
+                cpu_usage = np.random.normal(20.0, 5.0)
+            else:
+                cpu_usage = np.random.normal(85.0, 7.0)
+                
             memory_usage = np.random.normal(900.0, 120.0)
-            requests_per_minute = np.random.normal(2500.0, 400.0)
+            # Log-normal heavy requests/minute
+            requests_per_minute = np.random.lognormal(np.log(2500.0), 0.3)
+            
         elif scenario == 2:  # Cryptojacking
             temperature = np.random.normal(45.0, 4.0)
             humidity = np.random.normal(55.0, 8.0)
-            cpu_usage = np.random.normal(95.0, 3.0)
+            
+            # Mixture model: 92% mining CPU load, 8% sleep/throttle phase
+            if np.random.rand() < 0.08:
+                cpu_usage = np.random.normal(30.0, 10.0)
+            else:
+                cpu_usage = np.random.normal(95.0, 3.0)
+                
             memory_usage = np.random.normal(1200.0, 150.0)
-            requests_per_minute = np.random.normal(25.0, 5.0)
+            requests_per_minute = np.random.lognormal(np.log(25.0), 0.4)
+            
         elif scenario == 3:  # Thermal Tampering
             temperature = np.random.normal(90.0, 8.0)
             humidity = np.random.normal(15.0, 5.0)
             cpu_usage = np.random.normal(25.0, 6.0)
             memory_usage = np.random.normal(200.0, 30.0)
-            requests_per_minute = np.random.normal(15.0, 4.0)
+            requests_per_minute = np.random.lognormal(np.log(15.0), 0.4)
+            
         else:  # Reconnaissance
             temperature = np.random.normal(26.0, 3.0)
             humidity = np.random.normal(55.0, 8.0)
             cpu_usage = np.random.normal(35.0, 7.0)
             memory_usage = np.random.normal(280.0, 40.0)
-            requests_per_minute = np.random.normal(280.0, 40.0)
+            requests_per_minute = np.random.lognormal(np.log(280.0), 0.5)
+            
+        # 2. Add Jitter/Noise to simulate environment noise (15% of all samples)
+        if np.random.rand() < 0.15:
+            temperature += np.random.normal(0, 1.5)
+            cpu_usage += np.random.normal(0, 5.0)
+            memory_usage += np.random.normal(0, 20.0)
+            requests_per_minute += np.random.normal(0, 10.0)
+            
+        # 3. Sensor Dropout simulation (zero out 2% of metrics randomly)
+        if np.random.rand() < 0.02:
+            temperature = 0.0
+        if np.random.rand() < 0.02:
+            humidity = 0.0
             
         # Clip to realistic physical bounds
-        temperature = max(5.0, min(120.0, temperature))
+        temperature = max(0.0, min(120.0, temperature))
         humidity = max(0.0, min(100.0, humidity))
         cpu_usage = max(0.0, min(100.0, cpu_usage))
         memory_usage = max(16.0, min(4096.0, memory_usage))
@@ -83,7 +121,7 @@ def generate_training_dataset(samples=12000):
 
 
 # ==========================================
-# TEST DATASET GENERATION (INDEPENDENT SHIFTED ENVIRONMENT)
+# TEST DATASET GENERATION (INDEPENDENT SHIFTED & HIGHLY NOISY ENVIRONMENT)
 # ==========================================
 def generate_shifted_test_dataset(samples=3000):
     data = []
@@ -93,39 +131,73 @@ def generate_shifted_test_dataset(samples=3000):
     for _ in range(samples):
         scenario = np.random.choice(classes, p=probs)
         
+        # 1. Base Shifted Distributions with Spikes & Idles
         if scenario == 0:  # Normal
             temperature = np.random.normal(29.5, 5.0)
             humidity = np.random.normal(52.0, 12.0)
-            cpu_usage = np.random.normal(17.0, 8.0)
+            
+            # Mixture model with wider shift
+            if np.random.rand() < 0.08:
+                cpu_usage = np.random.normal(70.0, 15.0)
+            else:
+                cpu_usage = np.random.normal(17.0, 8.0)
+                
             memory_usage = np.random.normal(190.0, 40.0)
-            requests_per_minute = np.random.normal(16.0, 6.0)
+            requests_per_minute = np.random.lognormal(np.log(16.0), 0.5)
+            
         elif scenario == 1:  # DDoS
             temperature = np.random.normal(36.5, 6.0)
             humidity = np.random.normal(52.0, 12.0)
-            cpu_usage = np.random.normal(83.0, 11.0)
+            
+            if np.random.rand() < 0.15:
+                cpu_usage = np.random.normal(25.0, 8.0)
+            else:
+                cpu_usage = np.random.normal(83.0, 11.0)
+                
             memory_usage = np.random.normal(870.0, 180.0)
-            requests_per_minute = np.random.normal(2400.0, 600.0)
+            requests_per_minute = np.random.lognormal(np.log(2400.0), 0.4)
+            
         elif scenario == 2:  # Cryptojacking
             temperature = np.random.normal(49.5, 6.0)
             humidity = np.random.normal(52.0, 12.0)
-            cpu_usage = np.random.normal(92.0, 6.0)
+            
+            if np.random.rand() < 0.12:
+                cpu_usage = np.random.normal(35.0, 15.0)
+            else:
+                cpu_usage = np.random.normal(92.0, 6.0)
+                
             memory_usage = np.random.normal(1150.0, 220.0)
-            requests_per_minute = np.random.normal(26.0, 8.0)
+            requests_per_minute = np.random.lognormal(np.log(26.0), 0.5)
+            
         elif scenario == 3:  # Thermal Tampering
             temperature = np.random.normal(94.5, 10.0)
             humidity = np.random.normal(12.0, 7.0)
             cpu_usage = np.random.normal(27.0, 9.0)
             memory_usage = np.random.normal(210.0, 45.0)
-            requests_per_minute = np.random.normal(16.0, 6.0)
+            requests_per_minute = np.random.lognormal(np.log(16.0), 0.5)
+            
         else:  # Reconnaissance
             temperature = np.random.normal(30.5, 5.0)
             humidity = np.random.normal(52.0, 12.0)
             cpu_usage = np.random.normal(37.0, 10.0)
             memory_usage = np.random.normal(290.0, 60.0)
-            requests_per_minute = np.random.normal(290.0, 60.0)
+            requests_per_minute = np.random.lognormal(np.log(290.0), 0.6)
+            
+        # 2. Add Higher Jitter/Noise (25% of all samples)
+        if np.random.rand() < 0.25:
+            temperature += np.random.normal(0, 3.0)
+            cpu_usage += np.random.normal(0, 8.0)
+            memory_usage += np.random.normal(0, 40.0)
+            requests_per_minute += np.random.normal(0, 25.0)
+            
+        # 3. Sensor Dropout simulation (zero out 4% of metrics randomly)
+        if np.random.rand() < 0.04:
+            temperature = 0.0
+        if np.random.rand() < 0.04:
+            humidity = 0.0
             
         # Clip to realistic physical bounds
-        temperature = max(5.0, min(120.0, temperature))
+        temperature = max(0.0, min(120.0, temperature))
         humidity = max(0.0, min(100.0, humidity))
         cpu_usage = max(0.0, min(100.0, cpu_usage))
         memory_usage = max(16.0, min(4096.0, memory_usage))

@@ -122,12 +122,22 @@ class Device(Base):
 
     selected_kem = Column(
         String(100),
-        default="Kyber512"
+        default="ML-KEM-512"
     )
 
     selected_signature = Column(
         String(100),
-        default="Dilithium2"
+        default="ML-DSA-44"
+    )
+
+    sig_public_key_dilithium2 = Column(
+        String(2500),
+        nullable=True
+    )
+
+    sig_public_key_falcon512 = Column(
+        String(2500),
+        nullable=True
     )
 
     created_at = Column(
@@ -252,6 +262,51 @@ class BenchmarkResult(Base):
         default=0.0
     )
 
+    # Statistical keygen columns
+    keygen_mean_ms = Column(Float, default=0.0)
+    keygen_median_ms = Column(Float, default=0.0)
+    keygen_std_ms = Column(Float, default=0.0)
+    keygen_p95_ms = Column(Float, default=0.0)
+    keygen_p99_ms = Column(Float, default=0.0)
+    keygen_min_ms = Column(Float, default=0.0)
+    keygen_max_ms = Column(Float, default=0.0)
+
+    # Statistical encapsulation columns
+    encap_mean_ms = Column(Float, default=0.0)
+    encap_median_ms = Column(Float, default=0.0)
+    encap_std_ms = Column(Float, default=0.0)
+    encap_p95_ms = Column(Float, default=0.0)
+    encap_p99_ms = Column(Float, default=0.0)
+    encap_min_ms = Column(Float, default=0.0)
+    encap_max_ms = Column(Float, default=0.0)
+
+    # Statistical decapsulation columns
+    decap_mean_ms = Column(Float, default=0.0)
+    decap_median_ms = Column(Float, default=0.0)
+    decap_std_ms = Column(Float, default=0.0)
+    decap_p95_ms = Column(Float, default=0.0)
+    decap_p99_ms = Column(Float, default=0.0)
+    decap_min_ms = Column(Float, default=0.0)
+    decap_max_ms = Column(Float, default=0.0)
+
+    # Statistical signing columns
+    sign_mean_ms = Column(Float, default=0.0)
+    sign_median_ms = Column(Float, default=0.0)
+    sign_std_ms = Column(Float, default=0.0)
+    sign_p95_ms = Column(Float, default=0.0)
+    sign_p99_ms = Column(Float, default=0.0)
+    sign_min_ms = Column(Float, default=0.0)
+    sign_max_ms = Column(Float, default=0.0)
+
+    # Statistical verification columns
+    verify_mean_ms = Column(Float, default=0.0)
+    verify_median_ms = Column(Float, default=0.0)
+    verify_std_ms = Column(Float, default=0.0)
+    verify_p95_ms = Column(Float, default=0.0)
+    verify_p99_ms = Column(Float, default=0.0)
+    verify_min_ms = Column(Float, default=0.0)
+    verify_max_ms = Column(Float, default=0.0)
+
     memory_usage_mb = Column(
         Float,
         default=0.0
@@ -261,6 +316,12 @@ class BenchmarkResult(Base):
         Float,
         default=0.0
     )
+
+    pub_key_size_bytes = Column(Integer, default=0)
+    secret_key_size_bytes = Column(Integer, default=0)
+    ciphertext_size_bytes = Column(Integer, default=0)
+    shared_secret_size_bytes = Column(Integer, default=0)
+    signature_size_bytes = Column(Integer, default=0)
 
     timestamp = Column(
         DateTime,
@@ -284,9 +345,77 @@ def get_db():
 # CREATE TABLES
 # =====================================================
 
+def run_migrations():
+    """Runs schema migrations to add missing signature public key columns."""
+    from sqlalchemy import text
+    try:
+        with engine.begin() as conn:
+            # Query first row to see if columns are present
+            res = conn.execute(text("SELECT * FROM devices LIMIT 1"))
+            columns = res.keys()
+            
+            # Check and add sig_public_key_dilithium2
+            if "sig_public_key_dilithium2" not in columns:
+                print("Adding column sig_public_key_dilithium2 to table devices...")
+                conn.execute(text("ALTER TABLE devices ADD COLUMN sig_public_key_dilithium2 VARCHAR(2500)"))
+                
+            # Check and add sig_public_key_falcon512
+            if "sig_public_key_falcon512" not in columns:
+                print("Adding column sig_public_key_falcon512 to table devices...")
+                conn.execute(text("ALTER TABLE devices ADD COLUMN sig_public_key_falcon512 VARCHAR(2500)"))
+                
+    except Exception as e:
+        print(f"Database migration error: {e}")
+
+def run_benchmark_migrations():
+    """Runs schema migrations to add statistical columns to benchmark_results table."""
+    from sqlalchemy import text
+    try:
+        with engine.begin() as conn:
+            res = conn.execute(text("SELECT * FROM benchmark_results LIMIT 1"))
+            columns = res.keys()
+            
+            prefixes = ["keygen", "encap", "decap", "sign", "verify"]
+            suffixes = ["mean_ms", "median_ms", "std_ms", "p95_ms", "p99_ms", "min_ms", "max_ms"]
+            
+            for prefix in prefixes:
+                for suffix in suffixes:
+                    col_name = f"{prefix}_{suffix}"
+                    if col_name not in columns:
+                        print(f"Adding column {col_name} to table benchmark_results...")
+                        conn.execute(text(f"ALTER TABLE benchmark_results ADD COLUMN {col_name} FLOAT"))
+    except Exception as e:
+        print(f"Database benchmark migration error: {e}")
+
+def run_benchmark_size_migrations():
+    """Runs schema migrations to add key/ciphertext/signature size columns to benchmark_results table."""
+    from sqlalchemy import text
+    try:
+        with engine.begin() as conn:
+            res = conn.execute(text("SELECT * FROM benchmark_results LIMIT 1"))
+            columns = res.keys()
+            
+            size_cols = [
+                "pub_key_size_bytes",
+                "secret_key_size_bytes",
+                "ciphertext_size_bytes",
+                "shared_secret_size_bytes",
+                "signature_size_bytes"
+            ]
+            
+            for col in size_cols:
+                if col not in columns:
+                    print(f"Adding column {col} to table benchmark_results...")
+                    conn.execute(text(f"ALTER TABLE benchmark_results ADD COLUMN {col} INTEGER"))
+    except Exception as e:
+        print(f"Database benchmark size migration error: {e}")
+
 def init_db():
 
     Base.metadata.create_all(bind=engine)
+    run_migrations()
+    run_benchmark_migrations()
+    run_benchmark_size_migrations()
 
     print("QuantumShield Database Initialized")
 

@@ -7,22 +7,22 @@ import time
 import oqs
 
 OQS_ALGO_MAP = {
-    "Kyber512": "ML-KEM-512",
-    "Kyber768": "ML-KEM-768",
-    "Dilithium2": "ML-DSA-44",
-    "Falcon512": "Falcon-512"
+    "ML-KEM-512": "ML-KEM-512",
+    "ML-KEM-768": "ML-KEM-768",
+    "ML-DSA-44": "ML-DSA-44",
+    "FN-DSA-512": "Falcon-512"
 }
 
 class PQCManager:
 
-    def __init__(self, algorithm="Kyber512"):
+    def __init__(self, algorithm="ML-KEM-512"):
         self.supported_kems = [
-            "Kyber512",
-            "Kyber768"
+            "ML-KEM-512",
+            "ML-KEM-768"
         ]
         self.supported_signatures = [
-            "Dilithium2",
-            "Falcon512"
+            "ML-DSA-44",
+            "FN-DSA-512"
         ]
         
         all_supported = self.supported_kems + self.supported_signatures
@@ -54,7 +54,7 @@ class PQCManager:
             "ML-KEM-512": ["Kyber512", "Kyber512-AES"],
             "ML-KEM-768": ["Kyber768", "Kyber768-AES"],
             "ML-DSA-44": ["Dilithium2", "Dilithium2-AES"],
-            "Falcon-512": ["Falcon512", "Falcon-padded-512"]
+            "Falcon-512": ["Falcon512", "Falcon-padded-512", "FN-DSA-512"]
         }
         
         candidates = fallback_options.get(target_oqs, [])
@@ -171,14 +171,14 @@ class PQCManager:
 # BENCHMARK
 # ======================================
 
-def benchmark_algorithm(algorithm="Kyber512"):
+def benchmark_algorithm(algorithm="ML-KEM-512"):
     pqc = PQCManager(algorithm)
 
     start = time.perf_counter()
     keys = pqc.generate_keypair(algorithm)
     keygen_time = (time.perf_counter() - start) * 1000
 
-    is_kem = algorithm.startswith("Kyber")
+    is_kem = algorithm.startswith("ML-KEM")
 
     if is_kem:
         start = time.perf_counter()
@@ -186,8 +186,11 @@ def benchmark_algorithm(algorithm="Kyber512"):
         enc_time = (time.perf_counter() - start) * 1000
 
         start = time.perf_counter()
-        pqc.decapsulate(ciphertext, keys["private_key"])
+        recovered_secret = pqc.decapsulate(ciphertext, keys["private_key"])
         dec_time = (time.perf_counter() - start) * 1000
+
+        if secret != recovered_secret:
+            raise RuntimeError("Decapsulated KEM secret does not match encapsulated secret!")
 
         return {
             "algorithm": algorithm,
@@ -195,7 +198,12 @@ def benchmark_algorithm(algorithm="Kyber512"):
             "encapsulation_ms": round(enc_time, 4),
             "decapsulation_ms": round(dec_time, 4),
             "signature_ms": 0.0,
-            "verify_ms": 0.0
+            "verify_ms": 0.0,
+            "pub_key_size": len(bytes.fromhex(keys["public_key"])),
+            "secret_key_size": len(bytes.fromhex(keys["private_key"])),
+            "ciphertext_size": len(bytes.fromhex(ciphertext)),
+            "shared_secret_size": len(bytes.fromhex(secret)),
+            "signature_size": 0
         }
     else:
         # Signature algorithms
@@ -205,8 +213,11 @@ def benchmark_algorithm(algorithm="Kyber512"):
         sig_time = (time.perf_counter() - start) * 1000
 
         start = time.perf_counter()
-        pqc.verify(message, signature, keys["public_key"])
+        is_valid = pqc.verify(message, signature, keys["public_key"])
         ver_time = (time.perf_counter() - start) * 1000
+
+        if not is_valid:
+            raise RuntimeError("Signature verification failed")
 
         return {
             "algorithm": algorithm,
@@ -214,7 +225,12 @@ def benchmark_algorithm(algorithm="Kyber512"):
             "encapsulation_ms": 0.0,
             "decapsulation_ms": 0.0,
             "signature_ms": round(sig_time, 4),
-            "verify_ms": round(ver_time, 4)
+            "verify_ms": round(ver_time, 4),
+            "pub_key_size": len(bytes.fromhex(keys["public_key"])),
+            "secret_key_size": len(bytes.fromhex(keys["private_key"])),
+            "ciphertext_size": 0,
+            "shared_secret_size": 0,
+            "signature_size": len(bytes.fromhex(signature))
         }
 
 
@@ -226,7 +242,7 @@ if __name__ == "__main__":
     pqc = PQCManager()
     
     print("\nRunning benchmarks...")
-    for alg in ["Kyber512", "Kyber768", "Dilithium2", "Falcon512"]:
+    for alg in ["ML-KEM-512", "ML-KEM-768", "ML-DSA-44", "FN-DSA-512"]:
         try:
             res = benchmark_algorithm(alg)
             print(f"Benchmark {alg}: {res}")

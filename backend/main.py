@@ -41,8 +41,12 @@ async def lifespan(app: FastAPI):
             with engine.begin() as conn:
                 conn.execute(text("PRAGMA journal_mode=WAL;"))
                 print("SQLite WAL mode enabled.")
+    # Initialize Bridge KEM keypairs on startup
+    try:
+        from pqc.pqc_secure_channel import init_bridge_keys
+        init_bridge_keys()
     except Exception as e:
-        print(f"Error setting WAL mode: {e}")
+        print(f"Failed to initialize Bridge KEM keypairs: {e}")
         
     print("QuantumShield API Started")
     # Start the real simulator tasks
@@ -151,12 +155,18 @@ def register_device(
             virt_dev.cpu_usage = 8.0
             virt_dev.memory_usage = 128.0
             virt_dev.requests_per_minute = 10.0
+            
+            # Save the pre-generated public signature keys in the DB record
+            device.sig_public_key_dilithium2 = virt_dev.sig_keys.get("Dilithium2", {}).get("public_key")
+            device.sig_public_key_falcon512 = virt_dev.sig_keys.get("Falcon512", {}).get("public_key")
+            db.commit()
+            
             dm.DEVICES_MAP[device_id] = virt_dev
             task = asyncio.create_task(device_loop(virt_dev, client))
             dm.ACTIVE_TASKS.append(task)
             
             from mqtt_bridge import log_event
-            log_event("SOC", "INF", f"Dynamically added virtual device '{device_id}' to active simulation.")
+            log_event("SOC", "INF", f"Dynamically registered and key-authenticated new virtual device '{device_id}' to simulation.")
     except Exception as e:
         print(f"Failed to dynamically add device to simulator: {e}")
 
