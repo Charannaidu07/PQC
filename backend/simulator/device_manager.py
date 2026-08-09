@@ -108,6 +108,8 @@ class VirtualDevice:
         self.session_key = None
         self.session_kem_ciphertext = None
         self.session_packets_sent = 0
+        self.session_kem_algo = None
+        self.session_sig_algo = None
         
         # Stateful Attack parameters
         # States: "NORMAL", "RECONNAISSANCE", "ATTACKING", "MITIGATED"
@@ -154,6 +156,8 @@ class VirtualDevice:
         self.session_key = None
         self.session_kem_ciphertext = None
         self.session_packets_sent = 0
+        self.session_kem_algo = None
+        self.session_sig_algo = None
         
     def generate_payload(self) -> Dict[str, Any]:
         """Generate sensor data payload with diurnal cycles, thermal heating, PQC overhead, and state transitions"""
@@ -348,49 +352,60 @@ async def device_loop(device: VirtualDevice, mqtt_client: MQTTClient):
                 continue
                 
             # Encrypt and sign payload using selected PQC algorithms
-            payload_to_send = payload
             try:
                 from pqc.pqc_secure_channel import encrypt_and_sign_payload
                 sig_algo = device.selected_signature or "ML-DSA-44"
                 kem_algo = device.selected_kem or "ML-KEM-512"
                 
                 # Ensure keys are loaded
-                if sig_algo in device.sig_keys:
-                    sig_private_key = device.sig_keys[sig_algo]["private_key"]
-                    # Session key caching and rotation (every 20 packets)
-                    if device.session_key is not None and device.session_packets_sent < 20:
-                        secured_payload = encrypt_and_sign_payload(
-                            device_id=device.device_id,
-                            payload_dict=payload,
-                            kem_algo=kem_algo,
-                            sig_algo=sig_algo,
-                            device_sig_private_key_hex=sig_private_key,
-                            session_key=device.session_key,
-                            session_kem_ciphertext_hex=device.session_kem_ciphertext
-                        )
-                        device.session_packets_sent += 1
-                    else:
-                        secured_payload = encrypt_and_sign_payload(
-                            device_id=device.device_id,
-                            payload_dict=payload,
-                            kem_algo=kem_algo,
-                            sig_algo=sig_algo,
-                            device_sig_private_key_hex=sig_private_key
-                        )
-                        device.session_key = bytes.fromhex(secured_payload["session_key"])
-                        device.session_kem_ciphertext = secured_payload["kem_ciphertext"]
-                        device.session_packets_sent = 1
+                if sig_algo not in device.sig_keys:
+                    raise ValueError(f"Device missing signature keys for algorithm: {sig_algo}")
                     
-                    # Pop session_key local metadata
-                    secured_payload.pop("session_key", None)
+                sig_private_key = device.sig_keys[sig_algo]["private_key"]
+                
+                # Session key caching, rotation (every 20 packets), and renegotiation on algorithm switch
+                if (device.session_key is not None and 
+                    device.session_packets_sent < 20 and 
+                    kem_algo == device.session_kem_algo and 
+                    sig_algo == device.session_sig_algo):
                     
-                    # Attach public key for signature verification
-                    secured_payload["sig_public_key"] = device.sig_keys[sig_algo]["public_key"]
-                    payload_to_send = secured_payload
+                    secured_payload = encrypt_and_sign_payload(
+                        device_id=device.device_id,
+                        payload_dict=payload,
+                        kem_algo=kem_algo,
+                        sig_algo=sig_algo,
+                        device_sig_private_key_hex=sig_private_key,
+                        session_key=device.session_key,
+                        session_kem_ciphertext_hex=device.session_kem_ciphertext
+                    )
+                    device.session_packets_sent += 1
                 else:
-                    logger.warning(f"Device {device.device_id} missing signature keys for algorithm: {sig_algo}")
+                    logger.info(f"Reconfiguring/negotiating PQC session key for device {device.device_id} ({kem_algo} + {sig_algo})")
+                    secured_payload = encrypt_and_sign_payload(
+                        device_id=device.device_id,
+                        payload_dict=payload,
+                        kem_algo=kem_algo,
+                        sig_algo=sig_algo,
+                        device_sig_private_key_hex=sig_private_key
+                    )
+                    device.session_key = bytes.fromhex(secured_payload["session_key"])
+                    device.session_kem_ciphertext = secured_payload["kem_ciphertext"]
+                    device.session_kem_algo = kem_algo
+                    device.session_sig_algo = sig_algo
+                    device.session_packets_sent = 1
+                
+                # Pop session_key local metadata
+                secured_payload.pop("session_key", None)
+                
+                # Attach public key for signature verification
+                secured_payload["sig_public_key"] = device.sig_keys[sig_algo]["public_key"]
+                payload_to_send = secured_payload
+                
             except Exception as e:
-                logger.error(f"Failed to encrypt telemetry for device {device.device_id}: {e}")
+                logger.error(f"PQC SECURE CHANNEL FAILURE on device {device.device_id}: {e} - ABORTING telemetry transmission.")
+                # DO NOT SEND plaintext telemetry!
+                await asyncio.sleep(PUBLISH_INTERVAL)
+                continue
                 
             success = mqtt_client.publish(MQTT_TOPIC, json.dumps(payload_to_send))
             await asyncio.sleep(PUBLISH_INTERVAL)
