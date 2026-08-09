@@ -127,20 +127,32 @@ def encrypt_and_sign_payload(
         # 2. Derive key from shared secret using HKDF
         symmetric_key = derive_session_key(shared_secret_hex, device_id, kem_algo)
 
-    # 3. Encrypt with AES-GCM
-    payload_str = json.dumps(payload_dict)
+    # 3. Encrypt with AES-GCM and bind metadata using AAD
+    # We use canonical JSON serialization (sort_keys=True, separators=(',', ':'))
+    payload_str = json.dumps(payload_dict, sort_keys=True, separators=(',', ':'))
+    
+    protocol_version = "1.0"
+    aad_dict = {
+        "device_id": device_id,
+        "kem_algorithm": kem_algo,
+        "signature_algorithm": sig_algo,
+        "protocol_version": protocol_version
+    }
+    aad_bytes = json.dumps(aad_dict, sort_keys=True, separators=(',', ':')).encode('utf-8')
+    
     aesgcm = AESGCM(symmetric_key)
     nonce = os.urandom(12)
-    ciphertext = aesgcm.encrypt(nonce, payload_str.encode(), None)
+    ciphertext = aesgcm.encrypt(nonce, payload_str.encode('utf-8'), aad_bytes)
     encrypted_payload_hex = (nonce + ciphertext).hex()
 
-    # 4. Sign the payload package (device_id : kem_ciphertext : encrypted_payload)
-    message_to_sign = f"{device_id}:{kem_ciphertext_hex}:{encrypted_payload_hex}"
+    # 4. Sign the payload package (device_id : protocol_version : kem_ciphertext : encrypted_payload)
+    message_to_sign = f"{device_id}:{protocol_version}:{kem_ciphertext_hex}:{encrypted_payload_hex}"
     pqc_sig = PQCManager(sig_algo)
     signature_hex = pqc_sig.sign(message_to_sign, device_sig_private_key_hex)
 
     return {
         "device_id": device_id,
+        "protocol_version": protocol_version,
         "encrypted_payload": encrypted_payload_hex,
         "kem_ciphertext": kem_ciphertext_hex,
         "kem_algorithm": kem_algo,
@@ -162,6 +174,7 @@ def verify_and_decrypt_payload(
     Runs on the MQTT Bridge / Gateway.
     """
     device_id = msg_dict["device_id"]
+    protocol_version = msg_dict.get("protocol_version", "1.0")
     encrypted_payload_hex = msg_dict["encrypted_payload"]
     kem_ciphertext_hex = msg_dict["kem_ciphertext"]
     kem_algo = msg_dict["kem_algorithm"]
@@ -169,7 +182,7 @@ def verify_and_decrypt_payload(
     sig_algo = msg_dict["signature_algorithm"]
 
     # 1. Verify digital signature
-    message_to_sign = f"{device_id}:{kem_ciphertext_hex}:{encrypted_payload_hex}"
+    message_to_sign = f"{device_id}:{protocol_version}:{kem_ciphertext_hex}:{encrypted_payload_hex}"
     pqc_sig = PQCManager(sig_algo)
     is_valid = pqc_sig.verify(message_to_sign, signature_hex, device_sig_public_key_hex)
     if not is_valid:
@@ -192,11 +205,20 @@ def verify_and_decrypt_payload(
         # Cache the session key to bypass future decapsulations
         DECRYPTED_SESSIONS_CACHE[kem_ciphertext_hex] = symmetric_key
 
-    # 3. Decrypt payload
+    # 3. Decrypt payload validating the AAD
+    # Re-construct identical AAD dictionary using canonical serialization
+    aad_dict = {
+        "device_id": device_id,
+        "kem_algorithm": kem_algo,
+        "signature_algorithm": sig_algo,
+        "protocol_version": protocol_version
+    }
+    aad_bytes = json.dumps(aad_dict, sort_keys=True, separators=(',', ':')).encode('utf-8')
+
     aesgcm = AESGCM(symmetric_key)
     encrypted_bytes = bytes.fromhex(encrypted_payload_hex)
     nonce = encrypted_bytes[:12]
     ciphertext = encrypted_bytes[12:]
     
-    decrypted_bytes = aesgcm.decrypt(nonce, ciphertext, None)
-    return json.loads(decrypted_bytes.decode())
+    decrypted_bytes = aesgcm.decrypt(nonce, ciphertext, aad_bytes)
+    return json.loads(decrypted_bytes.decode('utf-8'))
