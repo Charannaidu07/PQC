@@ -159,6 +159,16 @@ class ThreatLog(Base):
         nullable=False
     )
 
+    ground_truth_type = Column(
+        String(100),
+        default="Normal"
+    )
+
+    predicted_type = Column(
+        String(100),
+        default="Normal"
+    )
+
     confidence = Column(
         Float,
         default=0.0
