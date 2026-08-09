@@ -1,6 +1,6 @@
 """
 QuantumShield-IoT
-PQC Abstraction Layer using real oqs library
+PQC Abstraction Layer using real oqs library with fallback resolution
 """
 
 import time
@@ -26,8 +26,47 @@ class PQCManager:
         ]
         self.algorithm = algorithm
 
-    def _get_oqs_name(self, algo):
-        return OQS_ALGO_MAP.get(algo, "Kyber512")
+    def _resolve_algo(self, algo_name, is_kem=True):
+        """
+        Dynamically verifies if the requested algorithm (or its standard FIPS name)
+        is supported and enabled in the host's OQS library. Falls back to legacy
+        aliases if the standard name is not compiled, preventing runtime segfaults.
+        """
+        target_oqs = OQS_ALGO_MAP.get(algo_name, algo_name)
+        
+        # Query host compiled capabilities
+        if is_kem:
+            enabled_mechanisms = oqs.get_enabled_kem_mechanisms()
+        else:
+            enabled_mechanisms = oqs.get_enabled_sig_mechanisms()
+            
+        # 1. Match primary standardized/preferred OQS name
+        if target_oqs in enabled_mechanisms:
+            return target_oqs
+            
+        # 2. Fall back to alternative names or original project labels
+        fallback_options = {
+            "ML-KEM-512": ["Kyber512", "Kyber512-AES"],
+            "ML-KEM-768": ["Kyber768", "Kyber768-AES"],
+            "ML-DSA-44": ["Dilithium2", "Dilithium2-AES"],
+            "Falcon-512": ["Falcon512", "Falcon-padded-512"]
+        }
+        
+        candidates = fallback_options.get(target_oqs, [])
+        for candidate in candidates:
+            if candidate in enabled_mechanisms:
+                return candidate
+                
+        # 3. Check if the input key is directly supported
+        if algo_name in enabled_mechanisms:
+            return algo_name
+
+        # 4. Fail fast with descriptive error
+        enabled_list_str = ", ".join(enabled_mechanisms[:8]) + ("..." if len(enabled_mechanisms) > 8 else "")
+        raise ValueError(
+            f"Cryptographic algorithm '{algo_name}' (OQS target: '{target_oqs}') is not enabled "
+            f"in the host liboqs environment. Enabled options: [{enabled_list_str}]"
+        )
 
     # ----------------------------------
     # KEY GENERATION
@@ -37,8 +76,8 @@ class PQCManager:
         if algorithm is not None:
             self.algorithm = algorithm
             
-        oqs_algo = self._get_oqs_name(self.algorithm)
         is_kem = self.algorithm in self.supported_kems
+        oqs_algo = self._resolve_algo(self.algorithm, is_kem=is_kem)
         
         if is_kem:
             with oqs.KeyEncapsulation(oqs_algo) as kem:
@@ -60,7 +99,7 @@ class PQCManager:
     # ----------------------------------
 
     def encapsulate(self, public_key_hex):
-        oqs_algo = self._get_oqs_name(self.algorithm)
+        oqs_algo = self._resolve_algo(self.algorithm, is_kem=True)
         public_key_bytes = bytes.fromhex(public_key_hex)
         
         with oqs.KeyEncapsulation(oqs_algo) as kem:
@@ -73,7 +112,7 @@ class PQCManager:
     # ----------------------------------
 
     def decapsulate(self, ciphertext_hex, private_key_hex):
-        oqs_algo = self._get_oqs_name(self.algorithm)
+        oqs_algo = self._resolve_algo(self.algorithm, is_kem=True)
         ciphertext_bytes = bytes.fromhex(ciphertext_hex)
         private_key_bytes = bytes.fromhex(private_key_hex)
         
@@ -87,7 +126,7 @@ class PQCManager:
     # ----------------------------------
 
     def sign(self, message, private_key_hex):
-        oqs_algo = self._get_oqs_name(self.algorithm)
+        oqs_algo = self._resolve_algo(self.algorithm, is_kem=False)
         private_key_bytes = bytes.fromhex(private_key_hex)
         
         if isinstance(message, str):
@@ -108,7 +147,7 @@ class PQCManager:
         if algorithm is not None:
             self.algorithm = algorithm
             
-        oqs_algo = self._get_oqs_name(self.algorithm)
+        oqs_algo = self._resolve_algo(self.algorithm, is_kem=False)
         signature_bytes = bytes.fromhex(signature_hex)
         public_key_bytes = bytes.fromhex(public_key_hex)
         
