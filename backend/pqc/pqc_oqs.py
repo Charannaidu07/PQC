@@ -7,8 +7,8 @@ import time
 import oqs
 
 OQS_ALGO_MAP = {
-    "Kyber512": "Kyber512",
-    "Kyber768": "Kyber768",
+    "Kyber512": "ML-KEM-512",
+    "Kyber768": "ML-KEM-768",
     "Dilithium2": "ML-DSA-44",
     "Falcon512": "Falcon-512"
 }
