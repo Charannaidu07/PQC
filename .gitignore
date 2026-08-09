@@ -1,0 +1,36 @@
+# Python
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+pip-log.txt
+pip-delete-this-directory.txt
+.venv/
+var/
+srv/
+share/
+
+# Databases, datasets & outputs
+quantumshield.db*
+attack_dataset.csv
+threat_model.pkl
+pqc_selector.pkl
+
+# Frontend
+node_modules/
+dist/
+dist-ssr/
+*.local
+
+# IDEs & System
+.vscode/
+.idea/
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
