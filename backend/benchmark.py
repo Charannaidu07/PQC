@@ -75,8 +75,8 @@ def run_benchmark(algorithm):
     benchmark = BenchmarkResult(
         algorithm=algorithm,
         keygen_time_ms=result["keygen_ms"],
-        encrypt_time_ms=result["encrypt_ms"],
-        decrypt_time_ms=result["decrypt_ms"],
+        encapsulation_time_ms=result["encapsulation_ms"],
+        decapsulation_time_ms=result["decapsulation_ms"],
         signature_time_ms=result.get("signature_ms", 0.0),
         verify_time_ms=result.get("verify_ms", 0.0),
         memory_usage_mb=round(memory_mb, 2),

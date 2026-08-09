@@ -148,8 +148,8 @@ def benchmark_algorithm(algorithm="Kyber512"):
         return {
             "algorithm": algorithm,
             "keygen_ms": round(keygen_time, 4),
-            "encrypt_ms": round(enc_time, 4),
-            "decrypt_ms": round(dec_time, 4),
+            "encapsulation_ms": round(enc_time, 4),
+            "decapsulation_ms": round(dec_time, 4),
             "signature_ms": 0.0,
             "verify_ms": 0.0
         }
@@ -167,8 +167,8 @@ def benchmark_algorithm(algorithm="Kyber512"):
         return {
             "algorithm": algorithm,
             "keygen_ms": round(keygen_time, 4),
-            "encrypt_ms": 0.0,
-            "decrypt_ms": 0.0,
+            "encapsulation_ms": 0.0,
+            "decapsulation_ms": 0.0,
             "signature_ms": round(sig_time, 4),
             "verify_ms": round(ver_time, 4)
         }
