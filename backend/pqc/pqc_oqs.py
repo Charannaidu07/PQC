@@ -24,6 +24,11 @@ class PQCManager:
             "Dilithium2",
             "Falcon512"
         ]
+        
+        all_supported = self.supported_kems + self.supported_signatures
+        if algorithm not in all_supported:
+            raise ValueError(f"Unsupported PQC algorithm: '{algorithm}'. Supported options: {all_supported}")
+            
         self.algorithm = algorithm
 
     def _resolve_algo(self, algo_name, is_kem=True):
