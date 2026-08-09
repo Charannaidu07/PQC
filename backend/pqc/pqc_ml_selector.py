@@ -111,6 +111,7 @@ def train_selector():
         "\nGenerating Dataset..."
     )
 
+    random.seed(42)
     df = generate_dataset()
 
     X = df[

@@ -635,3 +635,24 @@ def reset_simulator(db: Session = Depends(get_db)):
     log_event("SOC", "INF", "SOC simulation reset: cleared threat logs, unblocked devices, restored all battery levels.")
     
     return {"status": "success", "message": "Simulator fleet and threat database reset."}
+
+@app.get("/ai/metrics")
+def get_ai_metrics():
+    import json
+    metrics_path = os.path.join(os.path.dirname(__file__), "ai", "model_metrics.json")
+    if os.path.exists(metrics_path):
+        try:
+            with open(metrics_path, "r") as f:
+                return json.load(f)
+        except Exception as e:
+            return {"error": f"Failed to parse metrics: {e}"}
+    return {
+        "accuracy": 0.0,
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1_score": 0.0,
+        "roc_auc": 0.0,
+        "best_params": {},
+        "confusion_matrix": [],
+        "feature_importances": {}
+    }
