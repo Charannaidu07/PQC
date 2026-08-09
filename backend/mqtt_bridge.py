@@ -49,26 +49,56 @@ def process_payload(payload: dict):
 
         if is_encrypted:
             try:
-                sig_algo = payload.get("signature_algorithm", "Dilithium2")
+                sig_algo = payload.get("signature_algorithm", "ML-DSA-44")
                 
                 # Fetch device's registered public signature key from the DB
                 existing_device = db.query(Device).filter(Device.device_id == device_id).first()
                 db_pub_key = None
                 if existing_device:
-                    if sig_algo == "Dilithium2":
-                        db_pub_key = existing_device.sig_public_key_dilithium2
-                    elif sig_algo == "Falcon512":
-                        db_pub_key = existing_device.sig_public_key_falcon512
+                    if sig_algo == "ML-DSA-44" or sig_algo == "Dilithium2":
+                        db_pub_key = existing_device.sig_public_key_ml_dsa_44
+                    elif sig_algo == "FN-DSA-512" or sig_algo == "Falcon512":
+                        db_pub_key = existing_device.sig_public_key_fn_dsa_512
                         
-                # Fallback to the public key in the message if DB doesn't have it (TOFU)
-                public_key_to_use = db_pub_key or payload.get("sig_public_key")
+                # Close the TOFU spoofing vulnerability by requiring pre-registered keys
+                public_key_to_use = db_pub_key
                 
                 if not public_key_to_use:
-                    log_event("SOC", "ERR", f"Verification failed: No public key registered or provided for device {device_id}")
+                    log_event("SOC", "ERR", f"Verification failed: No public key registered for device {device_id}")
+                    # Log spoofing threat
+                    from database import ThreatLog
+                    threat_log = ThreatLog(
+                        device_id=device_id,
+                        threat_type="Signature Spoofing",
+                        ground_truth_type="Spoofing Attack",
+                        predicted_type="Signature Spoofing",
+                        confidence=1.0,
+                        severity="HIGH",
+                        blocked=True,
+                        timestamp=datetime.utcnow()
+                    )
+                    db.add(threat_log)
+                    db.commit()
+                    log_event("FW", "ERR", f"SOC automated firewall BLOCKED unauthenticated packet from unregistered device {device_id}")
                     return
                     
                 from pqc.pqc_secure_channel import verify_and_decrypt_payload
                 raw_telemetry = verify_and_decrypt_payload(payload, public_key_to_use)
+                
+                # 1. Replay Protection (Sequence & Timestamp checking)
+                sequence = raw_telemetry.get("sequence", 0)
+                timestamp_str = raw_telemetry.get("timestamp")
+                
+                if existing_device:
+                    last_seq = existing_device.last_sequence or 0
+                    if sequence <= last_seq:
+                        raise ValueError(f"Replay attack detected: packet sequence {sequence} <= last seen sequence {last_seq}")
+                    
+                    if timestamp_str:
+                        packet_time = datetime.fromisoformat(timestamp_str)
+                        time_diff = abs((datetime.utcnow() - packet_time).total_seconds())
+                        if time_diff > 120.0:  # Allow 2 minutes window to account for minor clock skew
+                            raise ValueError(f"Replay attack detected: packet timestamp {timestamp_str} is outside the allowed window (skew: {time_diff:.1f}s)")
                 
             except Exception as e:
                 log_event("SOC", "ERR", f"PQC Decryption/Signature verification failed for device {device_id}: {e}")
@@ -86,7 +116,7 @@ def process_payload(payload: dict):
                 )
                 db.add(threat_log)
                 db.commit()
-                log_event("FW", "ERR", f"SOC automated firewall BLOCKED tampered packet from device {device_id} due to invalid signature")
+                log_event("FW", "ERR", f"SOC automated firewall BLOCKED tampered/replayed packet from device {device_id} due to verification error")
                 return
 
         # Parse telemetry fields
@@ -95,20 +125,20 @@ def process_payload(payload: dict):
         battery = raw_telemetry.get("battery", 100)
         attack_type = raw_telemetry.get("attack_type")
 
-        # 1. Run AI Threat Detector
+        # 2. Run AI Threat Detector
         result = detect_threat(raw_telemetry)
         is_threat = result.get("threat", False)
         severity = result.get("severity", "LOW")
         confidence = result.get("confidence", 0.0)
 
-        # 2. Determine threat score and select PQC algorithm using RandomForest model
+        # 3. Determine threat score and select PQC algorithm using RandomForest model
         if is_threat:
             threat_score = confidence
             log_event("AI", "WRN", f"Threat detected on device {device_id} ({attack_type or 'Anomaly'}) - severity: {severity} (conf: {confidence*100:.1f}%)")
         else:
             threat_score = random.uniform(0.02, 0.10) # realistic normal variation
 
-        selected_kem, selected_sig = "Kyber512", "Dilithium2"
+        selected_kem, selected_sig = "ML-KEM-512", "ML-DSA-44"
         if select_algorithm:
             try:
                 selected_kem, selected_sig = select_algorithm(
@@ -120,7 +150,7 @@ def process_payload(payload: dict):
             except Exception as e:
                 print(f"Error calling select_algorithm: {e}")
 
-        # 3. Handle auto-mitigation
+        # 4. Handle auto-mitigation
         status = "ONLINE"
         existing_device = db.query(Device).filter(Device.device_id == device_id).first()
         if existing_device and existing_device.status == "BLOCKED":
@@ -130,7 +160,7 @@ def process_payload(payload: dict):
             status = "BLOCKED"
             log_event("FW", "ERR", f"SOC automated firewall BLOCKED device {device_id} due to high severity threat")
 
-        # 4. Save device state in DB and log cryptographic validations
+        # 5. Save device state in DB and log cryptographic validations
         if existing_device:
             # Check for PQC key rotation/reconfiguration
             old_kem = existing_device.selected_kem
@@ -155,22 +185,13 @@ def process_payload(payload: dict):
             existing_device.selected_signature = selected_sig
             existing_device.last_seen = datetime.utcnow()
             existing_device.status = status
+            if is_encrypted:
+                existing_device.last_sequence = raw_telemetry.get("sequence", 0)
             db.commit()
         else:
-            new_device = Device(
-                device_id=device_id,
-                device_name=f"Device-{device_id}",
-                cpu_usage=cpu_usage,
-                memory_usage=memory_usage,
-                battery_level=battery,
-                selected_kem=selected_kem,
-                selected_signature=selected_sig,
-                last_seen=datetime.utcnow(),
-                status=status
-            )
-            db.add(new_device)
-            db.commit()
-            log_event("SOC", "INF", f"Registered new device: {device_id}")
+            # Unregistered devices are completely blocked to prevent spoofing / Sybil attacks
+            log_event("SOC", "ERR", f"Blocked packet: Device {device_id} is not registered in the database.")
+            return
 
     except Exception as e:
         print(f"Error in process_payload: {e}")

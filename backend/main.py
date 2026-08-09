@@ -133,8 +133,8 @@ def register_device(
         cpu_usage=8.0,
         memory_usage=128.0,
         battery_level=100.0,
-        selected_kem="Kyber512",
-        selected_signature="Dilithium2",
+        selected_kem="ML-KEM-512",
+        selected_signature="ML-DSA-44",
         status="ONLINE",
         last_seen=datetime.utcnow()
     )
@@ -157,8 +157,8 @@ def register_device(
             virt_dev.requests_per_minute = 10.0
             
             # Save the pre-generated public signature keys in the DB record
-            device.sig_public_key_dilithium2 = virt_dev.sig_keys.get("Dilithium2", {}).get("public_key")
-            device.sig_public_key_falcon512 = virt_dev.sig_keys.get("Falcon512", {}).get("public_key")
+            device.sig_public_key_ml_dsa_44 = virt_dev.sig_keys.get("ML-DSA-44", {}).get("public_key")
+            device.sig_public_key_fn_dsa_512 = virt_dev.sig_keys.get("FN-DSA-512", {}).get("public_key")
             db.commit()
             
             dm.DEVICES_MAP[device_id] = virt_dev
@@ -622,8 +622,8 @@ def reset_simulator(db: Session = Depends(get_db)):
         dev.cpu_usage = 8.0
         dev.memory_usage = 128.0
         dev.battery_level = 100.0
-        dev.selected_kem = "Kyber512"
-        dev.selected_signature = "Dilithium2"
+        dev.selected_kem = "ML-KEM-512"
+        dev.selected_signature = "ML-DSA-44"
         dev.last_seen = datetime.utcnow()
     db.commit()
     

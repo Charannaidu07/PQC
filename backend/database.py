@@ -130,14 +130,19 @@ class Device(Base):
         default="ML-DSA-44"
     )
 
-    sig_public_key_dilithium2 = Column(
+    sig_public_key_ml_dsa_44 = Column(
         String(2500),
         nullable=True
     )
 
-    sig_public_key_falcon512 = Column(
+    sig_public_key_fn_dsa_512 = Column(
         String(2500),
         nullable=True
+    )
+
+    last_sequence = Column(
+        Integer,
+        default=0
     )
 
     created_at = Column(
@@ -346,7 +351,7 @@ def get_db():
 # =====================================================
 
 def run_migrations():
-    """Runs schema migrations to add missing signature public key columns."""
+    """Runs schema migrations on the database to add missing fields/columns."""
     from sqlalchemy import text
     try:
         with engine.begin() as conn:
@@ -354,15 +359,24 @@ def run_migrations():
             res = conn.execute(text("SELECT * FROM devices LIMIT 1"))
             columns = res.keys()
             
-            # Check and add sig_public_key_dilithium2
-            if "sig_public_key_dilithium2" not in columns:
-                print("Adding column sig_public_key_dilithium2 to table devices...")
-                conn.execute(text("ALTER TABLE devices ADD COLUMN sig_public_key_dilithium2 VARCHAR(2500)"))
+            # Check and add sig_public_key_ml_dsa_44
+            if "sig_public_key_ml_dsa_44" not in columns:
+                print("Adding column sig_public_key_ml_dsa_44 to table devices...")
+                conn.execute(text("ALTER TABLE devices ADD COLUMN sig_public_key_ml_dsa_44 VARCHAR(2500)"))
+                if "sig_public_key_dilithium2" in columns:
+                    conn.execute(text("UPDATE devices SET sig_public_key_ml_dsa_44 = sig_public_key_dilithium2"))
                 
-            # Check and add sig_public_key_falcon512
-            if "sig_public_key_falcon512" not in columns:
-                print("Adding column sig_public_key_falcon512 to table devices...")
-                conn.execute(text("ALTER TABLE devices ADD COLUMN sig_public_key_falcon512 VARCHAR(2500)"))
+            # Check and add sig_public_key_fn_dsa_512
+            if "sig_public_key_fn_dsa_512" not in columns:
+                print("Adding column sig_public_key_fn_dsa_512 to table devices...")
+                conn.execute(text("ALTER TABLE devices ADD COLUMN sig_public_key_fn_dsa_512 VARCHAR(2500)"))
+                if "sig_public_key_falcon512" in columns:
+                    conn.execute(text("UPDATE devices SET sig_public_key_fn_dsa_512 = sig_public_key_falcon512"))
+                
+            # Check and add last_sequence
+            if "last_sequence" not in columns:
+                print("Adding column last_sequence to table devices...")
+                conn.execute(text("ALTER TABLE devices ADD COLUMN last_sequence INTEGER DEFAULT 0"))
                 
     except Exception as e:
         print(f"Database migration error: {e}")

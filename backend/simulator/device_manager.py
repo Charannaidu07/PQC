@@ -103,6 +103,12 @@ class VirtualDevice:
         self.memory_usage = random.uniform(128, 256)
         self.requests_per_minute = random.uniform(5, 15)
         
+        # Replay protection & session caching
+        self.sequence_number = 0
+        self.session_key = None
+        self.session_kem_ciphertext = None
+        self.session_packets_sent = 0
+        
         # Stateful Attack parameters
         # States: "NORMAL", "RECONNAISSANCE", "ATTACKING", "MITIGATED"
         self.state = "NORMAL"
@@ -144,6 +150,10 @@ class VirtualDevice:
         self.cpu_usage = random.uniform(5, 12)
         self.memory_usage = random.uniform(128, 256)
         self.requests_per_minute = random.uniform(5, 15)
+        self.sequence_number = 0
+        self.session_key = None
+        self.session_kem_ciphertext = None
+        self.session_packets_sent = 0
         
     def generate_payload(self) -> Dict[str, Any]:
         """Generate sensor data payload with diurnal cycles, thermal heating, PQC overhead, and state transitions"""
@@ -163,10 +173,10 @@ class VirtualDevice:
                 self.selected_signature = dev.selected_signature or "ML-DSA-44"
                 
                 # Check and register signature public keys in DB if missing
-                if not dev.sig_public_key_dilithium2 or not dev.sig_public_key_falcon512:
+                if not dev.sig_public_key_ml_dsa_44 or not dev.sig_public_key_fn_dsa_512:
                     if self.sig_keys:
-                        dev.sig_public_key_dilithium2 = self.sig_keys.get("ML-DSA-44", {}).get("public_key")
-                        dev.sig_public_key_falcon512 = self.sig_keys.get("FN-DSA-512", {}).get("public_key")
+                        dev.sig_public_key_ml_dsa_44 = self.sig_keys.get("ML-DSA-44", {}).get("public_key")
+                        dev.sig_public_key_fn_dsa_512 = self.sig_keys.get("FN-DSA-512", {}).get("public_key")
                         session.commit()
             session.close()
         except Exception as e:
@@ -299,8 +309,11 @@ class VirtualDevice:
             if self.solar_capable and self.battery > 15.0:
                 self.battery = 15.0  # limit online threshold
                 
+        self.sequence_number += 1
         payload = {
             "device_id": self.device_id,
+            "sequence": self.sequence_number,
+            "timestamp": datetime.utcnow().isoformat(),
             "temperature": round(self.temperature, 2),
             "humidity": round(max(8.0, min(95.0, 78.0 - (self.temperature - 20.0) * 1.6 + random.uniform(-4, 4))), 2),
             "battery": round(self.battery, 2),
@@ -344,14 +357,34 @@ async def device_loop(device: VirtualDevice, mqtt_client: MQTTClient):
                 # Ensure keys are loaded
                 if sig_algo in device.sig_keys:
                     sig_private_key = device.sig_keys[sig_algo]["private_key"]
-                    secured_payload = encrypt_and_sign_payload(
-                        device_id=device.device_id,
-                        payload_dict=payload,
-                        kem_algo=kem_algo,
-                        sig_algo=sig_algo,
-                        device_sig_private_key_hex=sig_private_key
-                    )
-                    # Attach public key for signature verification (TOFU support)
+                    # Session key caching and rotation (every 20 packets)
+                    if device.session_key is not None and device.session_packets_sent < 20:
+                        secured_payload = encrypt_and_sign_payload(
+                            device_id=device.device_id,
+                            payload_dict=payload,
+                            kem_algo=kem_algo,
+                            sig_algo=sig_algo,
+                            device_sig_private_key_hex=sig_private_key,
+                            session_key=device.session_key,
+                            session_kem_ciphertext_hex=device.session_kem_ciphertext
+                        )
+                        device.session_packets_sent += 1
+                    else:
+                        secured_payload = encrypt_and_sign_payload(
+                            device_id=device.device_id,
+                            payload_dict=payload,
+                            kem_algo=kem_algo,
+                            sig_algo=sig_algo,
+                            device_sig_private_key_hex=sig_private_key
+                        )
+                        device.session_key = bytes.fromhex(secured_payload["session_key"])
+                        device.session_kem_ciphertext = secured_payload["kem_ciphertext"]
+                        device.session_packets_sent = 1
+                    
+                    # Pop session_key local metadata
+                    secured_payload.pop("session_key", None)
+                    
+                    # Attach public key for signature verification
                     secured_payload["sig_public_key"] = device.sig_keys[sig_algo]["public_key"]
                     payload_to_send = secured_payload
                 else:
@@ -375,11 +408,46 @@ async def start_simulator_background():
     mqtt_client = MQTTClient()
     mqtt_client.connect()
     
-    # Initialize devices
-    for i in range(NUMBER_OF_DEVICES):
-        device_id = f"iot_{i:05d}"
-        device = VirtualDevice(device_id)
-        DEVICES_MAP[device_id] = device
+    # Initialize devices and pre-register them in the database with their public keys
+    from database import SessionLocal, Device
+    session = SessionLocal()
+    try:
+        for i in range(NUMBER_OF_DEVICES):
+            device_id = f"iot_{i:05d}"
+            device = VirtualDevice(device_id)
+            DEVICES_MAP[device_id] = device
+            
+            # Pre-register in database to close the TOFU vulnerability window
+            existing = session.query(Device).filter(Device.device_id == device_id).first()
+            if not existing:
+                new_dev = Device(
+                    device_id=device_id,
+                    device_name=f"Device-{device_id}",
+                    cpu_usage=8.0,
+                    memory_usage=128.0,
+                    battery_level=100.0,
+                    selected_kem="ML-KEM-512",
+                    selected_signature="ML-DSA-44",
+                    status="ONLINE",
+                    last_seen=datetime.utcnow(),
+                    sig_public_key_ml_dsa_44=device.sig_keys.get("ML-DSA-44", {}).get("public_key"),
+                    sig_public_key_fn_dsa_512=device.sig_keys.get("FN-DSA-512", {}).get("public_key")
+                )
+                session.add(new_dev)
+            else:
+                # Ensure existing records have correct keys mapped
+                existing.sig_public_key_ml_dsa_44 = device.sig_keys.get("ML-DSA-44", {}).get("public_key")
+                existing.sig_public_key_fn_dsa_512 = device.sig_keys.get("FN-DSA-512", {}).get("public_key")
+        session.commit()
+        logger.info(f"Pre-registered {NUMBER_OF_DEVICES} devices with public signature keys in DB.")
+    except Exception as e:
+        logger.error(f"Failed to pre-register simulation devices: {e}")
+        session.rollback()
+    finally:
+        session.close()
+        
+    # Start tasks
+    for device in DEVICES_MAP.values():
         task = asyncio.create_task(device_loop(device, mqtt_client))
         ACTIVE_TASKS.append(task)
         

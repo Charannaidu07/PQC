@@ -8,7 +8,8 @@ import psutil
 
 from database import (
     SessionLocal,
-    BenchmarkResult
+    BenchmarkResult,
+    init_db
 )
 
 from pqc.pqc_oqs import (
@@ -19,6 +20,7 @@ from pqc.pqc_oqs import (
 # DATABASE
 # ==========================================
 
+init_db()
 db = SessionLocal()
 
 # ==========================================
