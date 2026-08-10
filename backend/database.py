@@ -31,11 +31,13 @@ from sqlalchemy.orm import (
 # DATABASE CONFIG
 # =====================================================
 
-DB_USER = "postgres"
-DB_PASSWORD = "postgres"
-DB_HOST = "127.0.0.1"
-DB_PORT = "5432"
-DB_NAME = "quantumshield"
+import os
+
+DB_USER = os.getenv("DB_USER", "postgres")
+DB_PASSWORD = os.getenv("DB_PASSWORD", "postgres")
+DB_HOST = os.getenv("DB_HOST", "127.0.0.1")
+DB_PORT = os.getenv("DB_PORT", "5432")
+DB_NAME = os.getenv("DB_NAME", "quantumshield")
 
 from sqlalchemy import text
 
@@ -59,6 +61,13 @@ try:
         conn.execute(text("SELECT 1"))
         print("Database Connected Successfully (PostgreSQL)")
 except Exception as e:
+    # Fail hard if PostgreSQL env variables are explicitly configured to prevent silent fallback
+    if os.getenv("DB_HOST") or os.getenv("DB_USER"):
+        import sys
+        print("CRITICAL DATABASE ERROR: PostgreSQL connection failed as configured. Failing hard to prevent silent fallback.")
+        print(f"Error details: {e}")
+        sys.exit(1)
+        
     print("PostgreSQL Database Connection Failed, falling back to SQLite.")
     print(f"Error: {e}")
     import os
@@ -152,7 +161,8 @@ class Device(Base):
 
     last_seen = Column(
         DateTime,
-        default=datetime.utcnow
+        default=datetime.utcnow,
+        index=True
     )
 
 # =====================================================
@@ -166,7 +176,8 @@ class ThreatLog(Base):
 
     device_id = Column(
         String(100),
-        nullable=False
+        nullable=False,
+        index=True
     )
 
     threat_type = Column(
@@ -181,7 +192,8 @@ class ThreatLog(Base):
 
     predicted_type = Column(
         String(100),
-        default="Normal"
+        default="Normal",
+        index=True
     )
 
     confidence = Column(
@@ -191,7 +203,8 @@ class ThreatLog(Base):
 
     severity = Column(
         String(50),
-        default="LOW"
+        default="LOW",
+        index=True
     )
 
     temperature = Column(
@@ -226,7 +239,8 @@ class ThreatLog(Base):
 
     timestamp = Column(
         DateTime,
-        default=datetime.utcnow
+        default=datetime.utcnow,
+        index=True
     )
 # =====================================================
 # BENCHMARK RESULTS TABLE
@@ -355,8 +369,8 @@ def init_db():
     from alembic.config import Config
     from alembic import command
 
-    # Create tables defined in SQLAlchemy models if they do not exist
-    Base.metadata.create_all(bind=engine)
+    # Issue 37: Rely strictly on Alembic migrations as the sole authoritative schema manager
+    # Removed Base.metadata.create_all(bind=engine)
     
     # Run Alembic migrations programmatically to apply updates & clean legacy columns
     try:

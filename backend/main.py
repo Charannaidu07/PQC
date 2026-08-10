@@ -1,8 +1,10 @@
 import random
 import asyncio
+import os
 from datetime import datetime, timedelta
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Depends
+from fastapi import FastAPI, Depends, Security, HTTPException, status
+from fastapi.security import APIKeyHeader
 from sqlalchemy.orm import Session
 from fastapi.middleware.cors import CORSMiddleware
 from database import (
@@ -15,6 +17,22 @@ from database import (
     engine
 )
 from sqlalchemy import func, text
+
+API_KEY = os.getenv("QUANTUMSHIELD_API_KEY", "quantumshield-secret-api-key")
+api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
+
+def verify_api_key(api_key: str = Security(api_key_header)):
+    if not api_key:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="X-API-Key header is missing!"
+        )
+    if api_key != API_KEY:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Invalid API Key!"
+        )
+    return api_key
 
 def update_offline_devices(db: Session):
     import simulator.device_manager as dm
@@ -44,10 +62,10 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         print(f"Failed to enable WAL mode: {e}")
         
-    # Initialize Bridge KEM keypairs on startup
+    # Initialize Bridge KEM keypairs on startup (force generation in RAM to ensure forward secrecy)
     try:
         from pqc.pqc_secure_channel import init_bridge_keys
-        init_bridge_keys()
+        init_bridge_keys(force_generate=True)
     except Exception as e:
         print(f"Failed to initialize Bridge KEM keypairs: {e}")
         
@@ -69,15 +87,24 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan
 )
+
+# CORS configuration
+allowed_origins_env = os.getenv("ALLOWED_ORIGINS")
+if allowed_origins_env:
+    allowed_origins = [origin.strip() for origin in allowed_origins_env.split(",")]
+else:
+    allowed_origins = [
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:3000",
+        "http://127.0.0.1:3000"
+    ]
+
 app.add_middleware(
     CORSMiddleware,
-
-    allow_origins=["*"],
-
+    allow_origins=allowed_origins,
     allow_credentials=True,
-
     allow_methods=["*"],
-
     allow_headers=["*"],
 )
 
@@ -100,11 +127,23 @@ def root():
 # --------------------------------------------------
 
 @app.get("/health")
-def health():
-
-    return {
-        "status": "healthy"
-    }
+def health(db: Session = Depends(get_db)):
+    health_status = {"status": "healthy", "database": "up", "pqc_keys": "loaded"}
+    
+    # 1. Check Database connection
+    try:
+        db.execute(text("SELECT 1"))
+    except Exception as e:
+        health_status["status"] = "unhealthy"
+        health_status["database"] = f"down: {str(e)}"
+        
+    # 2. Check PQC Keys loaded in memory
+    from pqc.pqc_secure_channel import BRIDGE_PRIVATE_KEYS, BRIDGE_PUBLIC_KEYS
+    if not BRIDGE_PRIVATE_KEYS or not BRIDGE_PUBLIC_KEYS:
+        health_status["status"] = "unhealthy"
+        health_status["pqc_keys"] = "missing"
+        
+    return health_status
 
 
 # --------------------------------------------------
@@ -115,7 +154,8 @@ def health():
 def register_device(
     device_id: str,
     device_name: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    api_key: str = Depends(verify_api_key)
 ):
 
     existing = (
@@ -563,7 +603,11 @@ def get_simulator_config():
     }
 
 @app.post("/simulator/config")
-def update_simulator_config(publish_interval: int = None, attack_probability: float = None):
+def update_simulator_config(
+    publish_interval: int = None,
+    attack_probability: float = None,
+    api_key: str = Depends(verify_api_key)
+):
     import simulator.device_manager as dm
     from mqtt_bridge import log_event
     if publish_interval is not None:
@@ -579,7 +623,11 @@ def update_simulator_config(publish_interval: int = None, attack_probability: fl
     }
 
 @app.post("/simulator/trigger-attack")
-def trigger_attack(attack_type: str, device_id: str = None):
+def trigger_attack(
+    attack_type: str,
+    device_id: str = None,
+    api_key: str = Depends(verify_api_key)
+):
     import simulator.device_manager as dm
     from mqtt_bridge import log_event
     
@@ -610,11 +658,22 @@ def trigger_attack(attack_type: str, device_id: str = None):
         return {"status": "error", "message": f"Device {target_device.device_id} is already in state {target_device.state}"}
 
 @app.post("/simulator/reset")
-def reset_simulator(db: Session = Depends(get_db)):
+def reset_simulator(
+    db: Session = Depends(get_db),
+    api_key: str = Depends(verify_api_key)
+):
     import simulator.device_manager as dm
     from mqtt_bridge import log_event, SYSTEM_LOGS
     
-    # Reset all devices in memory
+    # 1. Invalidate all active cryptographic sessions to prevent old-session replay risk
+    try:
+        from pqc.pqc_secure_channel import DECRYPTED_SESSIONS_CACHE
+        DECRYPTED_SESSIONS_CACHE.clear()
+        print("Decrypted sessions cache cleared on simulator reset.")
+    except Exception as e:
+        print(f"Failed to clear decrypted sessions cache: {e}")
+
+    # 2. Reset all devices in memory
     for device in dm.DEVICES_MAP.values():
         device.reset()
         

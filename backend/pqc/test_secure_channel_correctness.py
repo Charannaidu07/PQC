@@ -31,8 +31,8 @@ class TestSecureChannel(unittest.TestCase):
         cls.kem_algo = "ML-KEM-512"
         cls.sig_algo = "ML-DSA-44"
         
-        # Initialize KEM keys for bridge
-        init_bridge_keys()
+        # Initialize KEM keys for bridge (force in RAM for test process)
+        init_bridge_keys(force_generate=True)
         
         # Generate signature keys for test device
         pqc = PQCManager(cls.sig_algo)
@@ -71,7 +71,7 @@ class TestSecureChannel(unittest.TestCase):
         }
         
         # 1. Encrypt and sign on device
-        packet = encrypt_and_sign_payload(
+        packet, _ = encrypt_and_sign_payload(
             device_id=self.device_id,
             payload_dict=telemetry,
             kem_algo=self.kem_algo,
@@ -95,7 +95,7 @@ class TestSecureChannel(unittest.TestCase):
             "sequence": 105,
             "timestamp": datetime.utcnow().isoformat()
         }
-        packet = encrypt_and_sign_payload(
+        packet, _ = encrypt_and_sign_payload(
             device_id=self.device_id,
             payload_dict=telemetry,
             kem_algo=self.kem_algo,
@@ -121,7 +121,7 @@ class TestSecureChannel(unittest.TestCase):
             "sequence": 105,
             "timestamp": datetime.utcnow().isoformat()
         }
-        packet = encrypt_and_sign_payload(
+        packet, _ = encrypt_and_sign_payload(
             device_id=self.device_id,
             payload_dict=telemetry,
             kem_algo=self.kem_algo,
@@ -143,7 +143,7 @@ class TestSecureChannel(unittest.TestCase):
             "sequence": 105,
             "timestamp": datetime.utcnow().isoformat()
         }
-        packet = encrypt_and_sign_payload(
+        packet, _ = encrypt_and_sign_payload(
             device_id=self.device_id,
             payload_dict=telemetry,
             kem_algo=self.kem_algo,
@@ -165,7 +165,7 @@ class TestSecureChannel(unittest.TestCase):
             "sequence": 105,
             "timestamp": datetime.utcnow().isoformat()
         }
-        packet = encrypt_and_sign_payload(
+        packet, _ = encrypt_and_sign_payload(
             device_id=self.device_id,
             payload_dict=telemetry,
             kem_algo=self.kem_algo,
@@ -186,7 +186,7 @@ class TestSecureChannel(unittest.TestCase):
             "sequence": 105,
             "timestamp": datetime.utcnow().isoformat()
         }
-        packet = encrypt_and_sign_payload(
+        packet, _ = encrypt_and_sign_payload(
             device_id=self.device_id,
             payload_dict=telemetry,
             kem_algo=self.kem_algo,
@@ -210,7 +210,7 @@ class TestSecureChannel(unittest.TestCase):
             "sequence": 105,
             "timestamp": datetime.utcnow().isoformat()
         }
-        packet = encrypt_and_sign_payload(
+        packet, _ = encrypt_and_sign_payload(
             device_id=self.device_id,
             payload_dict=telemetry,
             kem_algo=self.kem_algo,
@@ -232,7 +232,7 @@ class TestSecureChannel(unittest.TestCase):
             "sequence": 105,
             "timestamp": datetime.utcnow().isoformat()
         }
-        packet = encrypt_and_sign_payload(
+        packet, _ = encrypt_and_sign_payload(
             device_id=self.device_id,
             payload_dict=telemetry,
             kem_algo=self.kem_algo,
@@ -256,7 +256,7 @@ class TestSecureChannel(unittest.TestCase):
             "sequence": 105,
             "timestamp": datetime.utcnow().isoformat()
         }
-        packet = encrypt_and_sign_payload(
+        packet, _ = encrypt_and_sign_payload(
             device_id=self.device_id,
             payload_dict=telemetry,
             kem_algo=self.kem_algo,

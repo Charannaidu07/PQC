@@ -43,11 +43,17 @@ def load_real_ton_iot_validation_dataset():
         df_raw["duration"] = pd.to_numeric(df_raw["duration"], errors="coerce").fillna(0.0)
         df_raw["src_pkts"] = pd.to_numeric(df_raw["src_pkts"], errors="coerce").fillna(0)
         df_raw["dst_pkts"] = pd.to_numeric(df_raw["dst_pkts"], errors="coerce").fillna(0)
+        df_raw["src_bytes"] = pd.to_numeric(df_raw["src_bytes"], errors="coerce").fillna(0)
+        df_raw["dst_bytes"] = pd.to_numeric(df_raw["dst_bytes"], errors="coerce").fillna(0)
         
         packet_rate = (df_raw["src_pkts"] + df_raw["dst_pkts"]) / (df_raw["duration"] + 1e-5)
         requests_per_minute = np.clip(packet_rate * 60.0, 0.0, 5000.0)
         
         raw_types = df_raw["type"].str.strip().str.lower().fillna("normal").values
+        src_pkts_arr = df_raw["src_pkts"].values
+        dst_pkts_arr = df_raw["dst_pkts"].values
+        src_bytes_arr = df_raw["src_bytes"].values
+        dst_bytes_arr = df_raw["dst_bytes"].values
         
         mapped_labels = []
         cpu_usages = []
@@ -56,7 +62,7 @@ def load_real_ton_iot_validation_dataset():
         humidities = []
         
         np.random.seed(42)
-        for idx, row in df_raw.iterrows():
+        for idx in range(len(df_raw)):
             raw_type = raw_types[idx]
             
             # Map attack types to our model categories:
@@ -67,24 +73,32 @@ def load_real_ton_iot_validation_dataset():
             #   so their ground truth support will be 0.
             if "ddos" in raw_type or "dos" in raw_type or "backdoor" in raw_type:
                 label = 1
-                cpu = np.random.normal(89.5, 4.2)
-                mem = np.random.normal(850.4, 45.0)
-                temp = np.random.normal(30.2, 3.4)
             elif "scanning" in raw_type or "password" in raw_type or "mitm" in raw_type or "xss" in raw_type or "injection" in raw_type:
                 label = 4
-                cpu = np.random.normal(32.4, 4.8)
-                mem = np.random.normal(182.5, 22.0)
-                temp = np.random.normal(23.5, 2.0)
             else:  # Normal / others
                 label = 0
-                cpu = np.random.normal(12.5, 2.2)
-                mem = np.random.normal(142.3, 8.5)
-                temp = np.random.normal(22.4, 1.8)
                 
-            cpu = max(0.0, min(100.0, cpu))
+            # Project CPU, Memory, Temperature, and Humidity purely from raw traffic features (No label leakage!)
+            total_pkts = float(src_pkts_arr[idx] + dst_pkts_arr[idx])
+            total_bytes = float(src_bytes_arr[idx] + dst_bytes_arr[idx])
+            
+            # CPU usage scales with packet counts and total bytes processed (representing resource exhaustion)
+            cpu = 8.0 + np.log1p(total_pkts) * 5.0 + np.log1p(total_bytes) * 1.5
+            cpu += np.random.normal(0, 1.5)
+            cpu = max(1.0, min(100.0, cpu))
+            
+            # Memory usage scales with active packet buffering requirements
+            mem = 128.0 + np.log1p(total_bytes) * 35.0 + np.log1p(total_pkts) * 10.0
+            mem += np.random.normal(0, 8.0)
             mem = max(16.0, min(4096.0, mem))
-            temp = max(0.0, min(120.0, temp))
-            hum = max(0.0, min(100.0, np.random.normal(54.2, 3.5)))
+            
+            # Temperature tracks CPU usage due to thermal load dissipation
+            temp = 20.0 + (cpu * 0.15) + np.random.normal(0, 1.0)
+            temp = max(15.0, min(110.0, temp))
+            
+            # Humidity tracks standard ambient baseline
+            hum = 54.2 + np.random.normal(0, 2.5)
+            hum = max(0.0, min(100.0, hum))
             
             mapped_labels.append(label)
             cpu_usages.append(cpu)

@@ -1,63 +1,78 @@
 {
     "real_world_evaluation": {
         "dataset_name": "UNSW TON_IoT Network Telemetry (Cross-Dataset Slice)",
-        "samples_evaluated": 2123,
-        "accuracy": 0.8115873763542157,
-        "balanced_accuracy": 0.8737373737373737,
-        "precision_weighted": 0.8944061120226924,
-        "recall_weighted": 0.8115873763542157,
-        "f1_weighted": 0.8161135450807334,
-        "precision_macro": 0.8534798534798534,
-        "macro_recall": 0.8737373737373737,
-        "f1_macro": 0.8282216664472818,
+        "samples_evaluated": 2000,
+        "accuracy": 0.4175,
+        "balanced_accuracy": 0.44766666666666666,
+        "precision_weighted": 0.5148363710892797,
+        "recall_weighted": 0.4175,
+        "f1_weighted": 0.37132416008020575,
+        "precision_macro": 0.30891697562328474,
+        "macro_recall": 0.33575,
+        "f1_macro": 0.2542876532799194,
         "confusion_matrix": [
             [
-                656,
-                0,
-                400
+                327,
+                163,
+                1,
+                509
+            ],
+            [
+                67,
+                11,
+                3,
+                419
             ],
             [
                 0,
-                557,
+                0,
+                0,
                 0
             ],
             [
+                3,
                 0,
                 0,
-                510
+                497
             ]
         ],
         "classification_report": {
             "Normal": {
-                "precision": 1.0,
-                "recall": 0.6212121212121212,
-                "f1-score": 0.7663551401869159,
-                "support": 1056.0
+                "precision": 0.8236775818639799,
+                "recall": 0.327,
+                "f1-score": 0.4681460272011453,
+                "support": 1000.0
             },
             "DDoS": {
-                "precision": 1.0,
-                "recall": 1.0,
-                "f1-score": 1.0,
-                "support": 557.0
+                "precision": 0.06321839080459771,
+                "recall": 0.022,
+                "f1-score": 0.032640949554896145,
+                "support": 500.0
+            },
+            "Cryptojacking": {
+                "precision": 0.0,
+                "recall": 0.0,
+                "f1-score": 0.0,
+                "support": 0.0
             },
             "Reconnaissance": {
-                "precision": 0.5604395604395604,
-                "recall": 1.0,
-                "f1-score": 0.7183098591549296,
-                "support": 510.0
+                "precision": 0.3487719298245614,
+                "recall": 0.994,
+                "f1-score": 0.5163636363636364,
+                "support": 500.0
             },
-            "accuracy": 0.8115873763542157,
+            "accuracy": 0.4175,
             "macro avg": {
-                "precision": 0.8534798534798534,
-                "recall": 0.8737373737373737,
-                "f1-score": 0.8282216664472818,
-                "support": 2123.0
+                "precision": 0.30891697562328474,
+                "recall": 0.33575,
+                "f1-score": 0.2542876532799194,
+                "support": 2000.0
             },
             "weighted avg": {
-                "precision": 0.8944061120226924,
-                "recall": 0.8115873763542157,
-                "f1-score": 0.8161135450807334,
-                "support": 2123.0
+                "precision": 0.5148363710892797,
+                "recall": 0.4175,
+                "f1-score": 0.37132416008020575,
+                "support": 2000.0
             }
         },
         "methodology_notes": "Evaluates the model on the three classes overlapping with raw network dataset: Normal, DDoS, and Reconnaissance. Network packets are mapped to requests_per_minute, and physical CPU/RAM/temperature signatures are projected based on traffic load constraints."

@@ -11,35 +11,44 @@ def download_and_slice():
     sha_path = os.path.join(target_dir, "SHA256.txt")
     
     url = "https://raw.githubusercontent.com/PatrickYanZihui/TON_IOT_Intrusion_Detection/2d_detection/rawDataSet/Train_Test_Network.csv"
-    print(f"Downloading slice from {url}...")
+    print(f"Downloading full mirror dataset (approx. 46MB) from: {url}...")
     
     try:
-        # Fetch normal records from start
-        req_normal = urllib.request.Request(url, headers={'Range': 'bytes=0-150000', 'User-Agent': 'Mozilla/5.0'})
-        with urllib.request.urlopen(req_normal, timeout=10) as r:
-            normal_data = r.read().decode('utf-8-sig', errors='ignore')
-        normal_lines = normal_data.split('\n')
-        if len(normal_lines) > 1:
-            normal_lines = normal_lines[:-1]
+        # Download the file fully into memory
+        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+        with urllib.request.urlopen(req, timeout=30) as r:
+            data = r.read()
             
-        # Fetch attack records from middle
-        req_attack = urllib.request.Request(url, headers={'Range': 'bytes=25000000-25150000', 'User-Agent': 'Mozilla/5.0'})
-        with urllib.request.urlopen(req_attack, timeout=10) as r:
-            attack_data = r.read().decode('utf-8-sig', errors='ignore')
-        attack_lines = attack_data.split('\n')
-        if len(attack_lines) > 2:
-            attack_lines = attack_lines[1:-1]
-            
-        combined_lines = normal_lines + attack_lines
-        combined_csv = '\n'.join(combined_lines)
+        print(f"Download complete. Loaded {len(data)} bytes. Parsing CSV...")
+        df_full = pd.read_csv(io.BytesIO(data), low_memory=False)
+        print(f"Total raw records loaded: {len(df_full)}")
+        
+        # Standardize attack type labels
+        df_full["type"] = df_full["type"].str.strip().str.lower().fillna("normal")
+        
+        # Deterministically sample from classes present to construct the 3-class slice:
+        # Normal, DDoS (including DDoS and DoS), and Reconnaissance (scanning)
+        df_normal = df_full[df_full["type"] == "normal"]
+        df_ddos = df_full[df_full["type"].isin(["ddos", "dos"])]
+        df_recon = df_full[df_full["type"] == "scanning"]
+        
+        print(f"Available records - Normal: {len(df_normal)}, DDoS/DoS: {len(df_ddos)}, Scanning: {len(df_recon)}")
+        
+        # Sample deterministically with fixed random state
+        df_normal_sampled = df_normal.sample(n=1000, random_state=42)
+        df_ddos_sampled = df_ddos.sample(n=500, random_state=42)
+        df_recon_sampled = df_recon.sample(n=500, random_state=42)
+        
+        # Combine
+        df_sliced = pd.concat([df_normal_sampled, df_ddos_sampled, df_recon_sampled]).reset_index(drop=True)
         
         # Ensure target dir exists
         os.makedirs(target_dir, exist_ok=True)
         
         # Save locally
-        with open(csv_path, "w", encoding="utf-8") as f:
-            f.write(combined_csv)
-            
+        df_sliced.to_csv(csv_path, index=False)
+        print(f"Deterministic slice containing {len(df_sliced)} records saved to: {csv_path}")
+        
         # Calculate SHA256 of local slice
         sha256_hash = hashlib.sha256()
         with open(csv_path, "rb") as f:
@@ -62,7 +71,7 @@ This directory contains a deterministic local slice of the UNSW TON_IoT dataset 
 - **Local Mirror:** https://github.com/PatrickYanZihui/TON_IOT_Intrusion_Detection
 - **Download Date:** 2026-08-10
 - **Format:** CSV
-- **Number of records:** 2123 (1056 Normal, 557 DDoS, 510 Reconnaissance)
+- **Number of records:** {len(df_sliced)} ({len(df_normal_sampled)} Normal, {len(df_ddos_sampled)} DDoS/DoS, {len(df_recon_sampled)} Reconnaissance)
 - **Local Slice SHA-256:** {hex_digest}
 
 ## Feature mapping
@@ -72,7 +81,7 @@ This directory contains a deterministic local slice of the UNSW TON_IoT dataset 
         with open(readme_path, "w", encoding="utf-8") as f:
             f.write(readme_content)
             
-        print("Slice successfully downloaded and metadata created locally.")
+        print(f"Metadata and README generated successfully. SHA-256: {hex_digest}")
     except Exception as e:
         print(f"Error downloading: {e}")
 

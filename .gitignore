@@ -19,6 +19,8 @@ attack_dataset.csv
 threat_model.pkl
 pqc_selector.pkl
 bridge_keys.json
+bridge_public_keys.json
+device_keys.json
 
 # Frontend
 node_modules/

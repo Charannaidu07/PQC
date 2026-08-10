@@ -15,9 +15,11 @@ try:
 except ImportError:
     select_algorithm = None
 
-MQTT_BROKER = "localhost"
-MQTT_PORT = 1883
-MQTT_TOPIC = "iot/data"
+import os
+
+MQTT_BROKER = os.getenv("MQTT_BROKER", "localhost")
+MQTT_PORT = int(os.getenv("MQTT_PORT", "1883"))
+MQTT_TOPIC = os.getenv("MQTT_TOPIC", "iot/data")
 
 # Global Thread-Safe Log Buffer
 SYSTEM_LOGS = []
@@ -221,6 +223,27 @@ def on_message(client, userdata, msg):
 client = mqtt.Client()
 client.on_connect = on_connect
 client.on_message = on_message
+
+# Authentication
+mqtt_user = os.getenv("MQTT_USER")
+mqtt_password = os.getenv("MQTT_PASSWORD")
+if mqtt_user:
+    client.username_pw_set(mqtt_user, mqtt_password)
+
+# TLS configuration
+mqtt_ca_certs = os.getenv("MQTT_CA_CERTS")
+mqtt_client_cert = os.getenv("MQTT_CLIENT_CERT")
+mqtt_client_key = os.getenv("MQTT_CLIENT_KEY")
+if mqtt_ca_certs:
+    try:
+        client.tls_set(
+            ca_certs=mqtt_ca_certs,
+            certfile=mqtt_client_cert,
+            keyfile=mqtt_client_key
+        )
+        print("MQTT Bridge TLS Configured successfully.")
+    except Exception as e:
+        print(f"Error configuring MQTT TLS: {e}")
 
 def start():
     print("Starting MQTT Bridge...")

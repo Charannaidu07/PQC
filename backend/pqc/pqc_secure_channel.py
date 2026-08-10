@@ -11,8 +11,14 @@ from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from cryptography.hazmat.primitives import hashes
 from pqc.pqc_oqs import PQCManager
 
-# Path to Bridge long-term KEM keys
-BRIDGE_KEYS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "bridge_keys.json")
+# Path to Bridge public keys on disk (no private keys on disk!)
+BRIDGE_PUBLIC_KEYS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "bridge_public_keys.json")
+LEGACY_KEYS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "bridge_keys.json")
+
+# In-memory store for Bridge private keys (never written to disk!)
+# Provides Perfect Forward Secrecy (PFS) by keeping keys purely in transient memory
+BRIDGE_PRIVATE_KEYS = {}
+BRIDGE_PUBLIC_KEYS = {}
 
 # Global Decrypted Sessions Cache for performance optimization (ML-KEM session key caching)
 # Implemented with TTL expiration and LRU/Max-Size eviction to prevent memory leaks
@@ -49,58 +55,66 @@ class DecryptedSessionsCache:
                 
         self.cache[key] = (val, now)
 
+    def clear(self):
+        """Purges all cached sessions, invalidating active communication sessions (e.g. on reset)."""
+        self.cache.clear()
+
 DECRYPTED_SESSIONS_CACHE = DecryptedSessionsCache(max_size=10000, ttl_seconds=600)
 
-def init_bridge_keys():
+def init_bridge_keys(force_generate: bool = False):
     """
-    Generates Bridge KEM keypairs for ML-KEM-512 and ML-KEM-768 and stores them in a local JSON
-    file if they do not exist. Reads existing keypairs if they are present.
+    Initializes Bridge KEM public/private key state.
+    - If force_generate is True (FastAPI startup), generates new ephemeral KEM keys in memory
+      and writes public keys to disk.
+    - If force_generate is False (simulator import), attempts to load public keys from disk. 
+      If not present, it generates them.
     """
-    if os.path.exists(BRIDGE_KEYS_FILE):
+    global BRIDGE_PRIVATE_KEYS, BRIDGE_PUBLIC_KEYS
+    
+    # 1. Clean up legacy file with private keys if it exists
+    if os.path.exists(LEGACY_KEYS_FILE):
         try:
-            with open(BRIDGE_KEYS_FILE, "r") as f:
-                keys = json.load(f)
-                if "ML-KEM-512" in keys and "ML-KEM-768" in keys:
-                    return keys
+            os.remove(LEGACY_KEYS_FILE)
+            print(f"Cleaned up legacy bridge keys file: {LEGACY_KEYS_FILE}")
         except Exception as e:
-            print(f"Error reading bridge keys file, generating new keys: {e}")
+            print(f"Warning: Failed to clean up legacy keys file: {e}")
             
-    print("Generating new Bridge KEM keypairs...")
+    if not force_generate and os.path.exists(BRIDGE_PUBLIC_KEYS_FILE):
+        try:
+            with open(BRIDGE_PUBLIC_KEYS_FILE, "r") as f:
+                BRIDGE_PUBLIC_KEYS = json.load(f)
+            print(f"Loaded existing Bridge public keys from disk: {BRIDGE_PUBLIC_KEYS_FILE}")
+            return
+        except Exception as e:
+            print(f"Error reading bridge public keys: {e}, regenerating...")
+            
+    # Generate new keypairs in RAM
+    print("Generating new ephemeral Bridge KEM keypairs in RAM...")
     pqc = PQCManager()
-    keys = {}
     for kem in ["ML-KEM-512", "ML-KEM-768"]:
         try:
             keypair = pqc.generate_keypair(kem)
-            keys[kem] = {
-                "public_key": keypair["public_key"],
-                "private_key": keypair["private_key"]
-            }
+            BRIDGE_PRIVATE_KEYS[kem] = keypair["private_key"]
+            BRIDGE_PUBLIC_KEYS[kem] = keypair["public_key"]
         except Exception as e:
             print(f"Failed to generate keypair for {kem}: {e}")
             
-    # Write to file with OS-protected owner-only file permissions (0o600)
+    # Save public keys to disk
     try:
-        flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC
-        # Open file descriptor with restricted read/write permissions
-        fd = os.open(BRIDGE_KEYS_FILE, flags, 0o600)
-        with open(fd, "w") as f:
-            json.dump(keys, f, indent=4)
-        try:
-            os.chmod(BRIDGE_KEYS_FILE, 0o600)
-        except Exception:
-            pass
-        print(f"Bridge KEM keypairs successfully saved to {BRIDGE_KEYS_FILE} with owner-only access permissions.")
+        with open(BRIDGE_PUBLIC_KEYS_FILE, "w") as f:
+            json.dump(BRIDGE_PUBLIC_KEYS, f, indent=4)
+        print(f"Bridge public KEM keys saved to {BRIDGE_PUBLIC_KEYS_FILE}")
     except Exception as e:
-        print(f"Failed to save bridge keys: {e}")
-        
-    return keys
+        print(f"Failed to save bridge public keys: {e}")
 
-# Initialize Bridge Keys in memory
-BRIDGE_KEYS = init_bridge_keys()
+# Default initialization in memory
+init_bridge_keys()
 
 def get_bridge_public_key(kem_algorithm: str) -> str:
     """Returns the Bridge's public KEM key for a given algorithm."""
-    return BRIDGE_KEYS.get(kem_algorithm, {}).get("public_key")
+    if not BRIDGE_PUBLIC_KEYS:
+        init_bridge_keys()
+    return BRIDGE_PUBLIC_KEYS.get(kem_algorithm)
 
 def derive_session_key(shared_secret_hex: str, device_id: str, kem_algo: str) -> bytes:
     """
@@ -131,7 +145,7 @@ def encrypt_and_sign_payload(
     device_sig_private_key_hex: str,
     session_key: bytes = None,
     session_kem_ciphertext_hex: str = None
-) -> dict:
+) -> tuple:
     """
     Secures a telemetry payload:
     1. Reuses or encapsulates a shared secret using the Bridge KEM public key.
@@ -139,7 +153,7 @@ def encrypt_and_sign_payload(
     3. Encrypts the payload JSON using AES-GCM.
     4. Signs the payload and metadata using the Device signature private key.
     
-    Runs on the simulated device.
+    Returns (secured_payload_dict, session_key_bytes) as a tuple.
     """
     if session_key is not None and session_kem_ciphertext_hex is not None:
         symmetric_key = session_key
@@ -148,8 +162,7 @@ def encrypt_and_sign_payload(
         bridge_pub_key = get_bridge_public_key(kem_algo)
         if not bridge_pub_key:
             # If Bridge keys weren't initialized properly, force reload
-            global BRIDGE_KEYS
-            BRIDGE_KEYS = init_bridge_keys()
+            init_bridge_keys()
             bridge_pub_key = get_bridge_public_key(kem_algo)
             if not bridge_pub_key:
                 raise ValueError(f"Bridge public key not found for KEM algorithm: {kem_algo}")
@@ -162,7 +175,6 @@ def encrypt_and_sign_payload(
         symmetric_key = derive_session_key(shared_secret_hex, device_id, kem_algo)
 
     # 3. Encrypt with AES-GCM and bind metadata using AAD
-    # We use canonical JSON serialization (sort_keys=True, separators=(',', ':'))
     payload_str = json.dumps(payload_dict, sort_keys=True, separators=(',', ':'))
     
     protocol_version = "1.0"
@@ -184,16 +196,17 @@ def encrypt_and_sign_payload(
     pqc_sig = PQCManager(sig_algo)
     signature_hex = pqc_sig.sign(message_to_sign, device_sig_private_key_hex)
 
-    return {
+    secured_payload = {
         "device_id": device_id,
         "protocol_version": protocol_version,
         "encrypted_payload": encrypted_payload_hex,
         "kem_ciphertext": kem_ciphertext_hex,
         "kem_algorithm": kem_algo,
         "signature": signature_hex,
-        "signature_algorithm": sig_algo,
-        "session_key": symmetric_key.hex()
+        "signature_algorithm": sig_algo
     }
+
+    return secured_payload, symmetric_key
 
 def verify_and_decrypt_payload(
     msg_dict: dict,
@@ -208,7 +221,12 @@ def verify_and_decrypt_payload(
     Runs on the MQTT Bridge / Gateway.
     """
     device_id = msg_dict["device_id"]
-    protocol_version = msg_dict.get("protocol_version", "1.0")
+    protocol_version = msg_dict.get("protocol_version")
+    if not protocol_version:
+        raise ValueError("Protocol version is missing from secured payload!")
+    if protocol_version != "1.0":
+        raise ValueError(f"Unsupported/invalid protocol version: {protocol_version}")
+        
     encrypted_payload_hex = msg_dict["encrypted_payload"]
     kem_ciphertext_hex = msg_dict["kem_ciphertext"]
     kem_algo = msg_dict["kem_algorithm"]
@@ -227,9 +245,9 @@ def verify_and_decrypt_payload(
     symmetric_key = DECRYPTED_SESSIONS_CACHE.get(cache_key)
     
     if not symmetric_key:
-        bridge_private_key = BRIDGE_KEYS.get(kem_algo, {}).get("private_key")
+        bridge_private_key = BRIDGE_PRIVATE_KEYS.get(kem_algo)
         if not bridge_private_key:
-            raise ValueError(f"Bridge private key not found in server keychain for KEM algorithm: {kem_algo}")
+            raise ValueError(f"Bridge private key not found in memory keychain for KEM algorithm: {kem_algo}")
             
         pqc_kem = PQCManager(kem_algo)
         shared_secret_hex = pqc_kem.decapsulate(kem_ciphertext_hex, bridge_private_key)
@@ -239,16 +257,18 @@ def verify_and_decrypt_payload(
         
         # Cache the session key to bypass future decapsulations
         DECRYPTED_SESSIONS_CACHE.set(cache_key, symmetric_key)
+        
+        # Explicit Session ID derived from SHA256 of KEM ciphertext
+        session_id = hashlib.sha256(bytes.fromhex(kem_ciphertext_hex)).hexdigest()[:16]
 
         # Log session establishment
         try:
             from mqtt_bridge import log_event
-            log_event("PQC", "INF", f"Established/rekeyed PQC session using {kem_algo} and {sig_algo} for device {device_id}")
+            log_event("PQC", "INF", f"Established/rekeyed PQC session [{session_id}] using {kem_algo} and {sig_algo} for device {device_id}")
         except Exception:
             pass
 
     # 3. Decrypt payload validating the AAD
-    # Re-construct identical AAD dictionary using canonical serialization
     aad_dict = {
         "device_id": device_id,
         "kem_algorithm": kem_algo,

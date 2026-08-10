@@ -14,12 +14,12 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import paho.mqtt.client as mqtt
 
 # Configuration
-MQTT_BROKER = "localhost"
-MQTT_PORT = 1883
-MQTT_TOPIC = "iot/data"
-NUMBER_OF_DEVICES = 1000
-PUBLISH_INTERVAL = 10
-ATTACK_PROBABILITY = 0.005  # Spontaneous attack probability
+MQTT_BROKER = os.getenv("MQTT_BROKER", "localhost")
+MQTT_PORT = int(os.getenv("MQTT_PORT", "1883"))
+MQTT_TOPIC = os.getenv("MQTT_TOPIC", "iot/data")
+NUMBER_OF_DEVICES = int(os.getenv("NUMBER_OF_DEVICES", "1000"))
+PUBLISH_INTERVAL = int(os.getenv("PUBLISH_INTERVAL", "10"))
+ATTACK_PROBABILITY = float(os.getenv("ATTACK_PROBABILITY", "0.005"))
 
 # Setup logging
 logging.basicConfig(
@@ -31,6 +31,48 @@ logger = logging.getLogger(__name__)
 # Global registry of devices for API access
 DEVICES_MAP: Dict[str, 'VirtualDevice'] = {}
 ACTIVE_TASKS = []
+
+SIMULATOR_KEYS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "device_keys.json")
+_SIMULATOR_KEYS_CACHE = None
+
+def get_simulator_device_keys(device_id: str) -> dict:
+    """Loads or generates persistent signature keys for a given device to prevent silent changes on restart."""
+    global _SIMULATOR_KEYS_CACHE
+    if _SIMULATOR_KEYS_CACHE is None:
+        if os.path.exists(SIMULATOR_KEYS_FILE):
+            try:
+                with open(SIMULATOR_KEYS_FILE, "r") as f:
+                    _SIMULATOR_KEYS_CACHE = json.load(f)
+                logger.info(f"Loaded persistent device keys from: {SIMULATOR_KEYS_FILE}")
+            except Exception as e:
+                logger.error(f"Failed to read device keys file: {e}")
+                _SIMULATOR_KEYS_CACHE = {}
+        else:
+            _SIMULATOR_KEYS_CACHE = {}
+            
+    if device_id in _SIMULATOR_KEYS_CACHE:
+        return _SIMULATOR_KEYS_CACHE[device_id]
+        
+    # Generate new signature keys for both algorithms
+    from pqc.pqc_oqs import PQCManager
+    pqc = PQCManager()
+    device_keys = {}
+    for sig in ["ML-DSA-44", "FN-DSA-512"]:
+        try:
+            device_keys[sig] = pqc.generate_keypair(sig)
+        except Exception as e:
+            logger.error(f"Failed to generate keypair for {sig} on device {device_id}: {e}")
+            
+    _SIMULATOR_KEYS_CACHE[device_id] = device_keys
+    
+    # Save cache back to disk
+    try:
+        with open(SIMULATOR_KEYS_FILE, "w") as f:
+            json.dump(_SIMULATOR_KEYS_CACHE, f, indent=4)
+    except Exception as e:
+        logger.error(f"Failed to save device keys: {e}")
+        
+    return device_keys
 
 class MQTTClient:
     """Wrapper for MQTT client with reconnection support and in-memory fallback"""
@@ -56,6 +98,27 @@ class MQTTClient:
             
     def connect(self):
         try:
+            # Authentication
+            mqtt_user = os.getenv("MQTT_USER")
+            mqtt_password = os.getenv("MQTT_PASSWORD")
+            if mqtt_user:
+                self.client.username_pw_set(mqtt_user, mqtt_password)
+                
+            # TLS configuration
+            mqtt_ca_certs = os.getenv("MQTT_CA_CERTS")
+            mqtt_client_cert = os.getenv("MQTT_CLIENT_CERT")
+            mqtt_client_key = os.getenv("MQTT_CLIENT_KEY")
+            if mqtt_ca_certs:
+                try:
+                    self.client.tls_set(
+                        ca_certs=mqtt_ca_certs,
+                        certfile=mqtt_client_cert,
+                        keyfile=mqtt_client_key
+                    )
+                    logger.info("MQTT Client TLS Configured successfully.")
+                except Exception as e:
+                    logger.error(f"Error configuring MQTT TLS: {e}")
+
             # Fast timeout for local connect to fail quick and trigger in-memory fallback
             self.client.connect(MQTT_BROKER, MQTT_PORT, keepalive=10)
             self.client.loop_start()
@@ -138,14 +201,8 @@ class VirtualDevice:
         self._init_keys()
 
     def _init_keys(self):
-        """Generates long-term signature keypairs for both ML-DSA-44 and FN-DSA-512."""
-        try:
-            from pqc.pqc_oqs import PQCManager
-            pqc = PQCManager()
-            for sig in ["ML-DSA-44", "FN-DSA-512"]:
-                self.sig_keys[sig] = pqc.generate_keypair(sig)
-        except Exception as e:
-            logger.error(f"Failed to generate signature keypairs for device {self.device_id}: {e}")
+        """Loads persistent long-term signature keypairs for both ML-DSA-44 and FN-DSA-512."""
+        self.sig_keys = get_simulator_device_keys(self.device_id)
         
     def trigger_attack(self, attack_type: str):
         """Manually trigger an attack on this device"""
@@ -397,7 +454,7 @@ async def device_loop(device: VirtualDevice, mqtt_client: MQTTClient):
                     kem_algo == device.session_kem_algo and 
                     sig_algo == device.session_sig_algo):
                     
-                    secured_payload = encrypt_and_sign_payload(
+                    secured_payload, _ = encrypt_and_sign_payload(
                         device_id=device.device_id,
                         payload_dict=payload,
                         kem_algo=kem_algo,
@@ -409,25 +466,20 @@ async def device_loop(device: VirtualDevice, mqtt_client: MQTTClient):
                     device.session_packets_sent += 1
                 else:
                     logger.info(f"Reconfiguring/negotiating PQC session key for device {device.device_id} ({kem_algo} + {sig_algo})")
-                    secured_payload = encrypt_and_sign_payload(
+                    secured_payload, new_session_key = encrypt_and_sign_payload(
                         device_id=device.device_id,
                         payload_dict=payload,
                         kem_algo=kem_algo,
                         sig_algo=sig_algo,
                         device_sig_private_key_hex=sig_private_key
                     )
-                    device.session_key = bytes.fromhex(secured_payload["session_key"])
+                    device.session_key = new_session_key
                     device.session_kem_ciphertext = secured_payload["kem_ciphertext"]
                     device.session_kem_algo = kem_algo
                     device.session_sig_algo = sig_algo
                     device.session_packets_sent = 1
                     device.session_start_time = pytime.time()
                 
-                # Pop session_key local metadata
-                secured_payload.pop("session_key", None)
-                
-                # Attach public key for signature verification
-                secured_payload["sig_public_key"] = device.sig_keys[sig_algo]["public_key"]
                 payload_to_send = secured_payload
                 
             except Exception as e:
