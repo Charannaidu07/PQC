@@ -41,6 +41,9 @@ async def lifespan(app: FastAPI):
             with engine.begin() as conn:
                 conn.execute(text("PRAGMA journal_mode=WAL;"))
                 print("SQLite WAL mode enabled.")
+    except Exception as e:
+        print(f"Failed to enable WAL mode: {e}")
+        
     # Initialize Bridge KEM keypairs on startup
     try:
         from pqc.pqc_secure_channel import init_bridge_keys
@@ -625,15 +628,24 @@ def reset_simulator(db: Session = Depends(get_db)):
         dev.selected_kem = "ML-KEM-512"
         dev.selected_signature = "ML-DSA-44"
         dev.last_seen = datetime.utcnow()
+        dev.last_sequence = 0
     db.commit()
     
+    # Reset simulation device states in memory
+    try:
+        from simulator.device_manager import DEVICES_MAP
+        for sim_dev in DEVICES_MAP.values():
+            sim_dev.reset()
+    except Exception as e:
+        print(f"Failed to reset simulation device states: {e}")
+        
     # Clear threat logs
     db.query(ThreatLog).delete()
     db.commit()
     
     # Clear logs and trigger reset event
     SYSTEM_LOGS.clear()
-    log_event("SOC", "INF", "SOC simulation reset: cleared threat logs, unblocked devices, restored all battery levels.")
+    log_event("SOC", "INF", "SOC simulation reset: cleared threat logs, unblocked devices, restored all battery levels, reset sequence counters.")
     
     return {"status": "success", "message": "Simulator fleet and threat database reset."}
 

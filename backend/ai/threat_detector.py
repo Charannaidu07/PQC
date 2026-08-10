@@ -63,16 +63,15 @@ THREAT_MAP = {
 }
 
 # -----------------------------------------
-# DATABASE
-# -----------------------------------------
-
-db = SessionLocal()
-
-# -----------------------------------------
 # DETECT THREAT
 # -----------------------------------------
 
-def detect_threat(payload):
+def detect_threat(payload, db=None):
+    local_session = False
+    if db is None:
+        db = SessionLocal()
+        local_session = True
+        
     try:
         temperature = payload.get("temperature", 0)
         humidity = payload.get("humidity", 0)
@@ -114,9 +113,9 @@ def detect_threat(payload):
         predicted_type = THREAT_MAP.get(prediction, "Normal")
 
         # Log to DB if either AI predicts an anomaly, OR there is a ground truth anomaly (to capture False Negatives)
+        severity = "LOW"
         if prediction != 0 or ground_truth != "Normal":
             # Handle severity logic
-            severity = "LOW"
             if prediction != 0:
                 if confidence > 0.95:
                     severity = "HIGH"
@@ -163,7 +162,12 @@ def detect_threat(payload):
         }
 
     except Exception as e:
+        if local_session:
+            db.rollback()
         print(f"Detection Error: {e}")
         return {
             "error": str(e)
         }
+    finally:
+        if local_session:
+            db.close()

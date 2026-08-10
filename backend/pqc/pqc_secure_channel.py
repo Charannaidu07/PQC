@@ -15,7 +15,41 @@ from pqc.pqc_oqs import PQCManager
 BRIDGE_KEYS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "bridge_keys.json")
 
 # Global Decrypted Sessions Cache for performance optimization (ML-KEM session key caching)
-DECRYPTED_SESSIONS_CACHE = {}
+# Implemented with TTL expiration and LRU/Max-Size eviction to prevent memory leaks
+import time
+class DecryptedSessionsCache:
+    def __init__(self, max_size=10000, ttl_seconds=600):
+        self.cache = {}  # key -> (symmetric_key, timestamp)
+        self.max_size = max_size
+        self.ttl_seconds = ttl_seconds
+        
+    def get(self, key):
+        if key in self.cache:
+            val, ts = self.cache[key]
+            if time.time() - ts <= self.ttl_seconds:
+                # Update timestamp on hit (LRU behavior)
+                self.cache[key] = (val, time.time())
+                return val
+            else:
+                del self.cache[key]
+        return None
+        
+    def set(self, key, val):
+        now = time.time()
+        # Enforce max size (evict expired or oldest if full)
+        if key not in self.cache and len(self.cache) >= self.max_size:
+            # Clean expired keys first
+            expired_keys = [k for k, (_, ts) in self.cache.items() if now - ts > self.ttl_seconds]
+            for k in expired_keys:
+                del self.cache[k]
+            # If still full, evict the oldest key
+            if len(self.cache) >= self.max_size:
+                oldest_key = min(self.cache.keys(), key=lambda k: self.cache[k][1])
+                del self.cache[oldest_key]
+                
+        self.cache[key] = (val, now)
+
+DECRYPTED_SESSIONS_CACHE = DecryptedSessionsCache(max_size=10000, ttl_seconds=600)
 
 def init_bridge_keys():
     """
@@ -188,10 +222,11 @@ def verify_and_decrypt_payload(
     if not is_valid:
         raise ValueError("Invalid digital signature! Packet authentication failed.")
 
-    # 2. Re-use or decapsulate session key
-    if kem_ciphertext_hex in DECRYPTED_SESSIONS_CACHE:
-        symmetric_key = DECRYPTED_SESSIONS_CACHE[kem_ciphertext_hex]
-    else:
+    # 2. Re-use or decapsulate session key bound to (device_id, kem_algorithm, kem_ciphertext)
+    cache_key = (device_id, kem_algo, kem_ciphertext_hex)
+    symmetric_key = DECRYPTED_SESSIONS_CACHE.get(cache_key)
+    
+    if not symmetric_key:
         bridge_private_key = BRIDGE_KEYS.get(kem_algo, {}).get("private_key")
         if not bridge_private_key:
             raise ValueError(f"Bridge private key not found in server keychain for KEM algorithm: {kem_algo}")
@@ -203,7 +238,14 @@ def verify_and_decrypt_payload(
         symmetric_key = derive_session_key(shared_secret_hex, device_id, kem_algo)
         
         # Cache the session key to bypass future decapsulations
-        DECRYPTED_SESSIONS_CACHE[kem_ciphertext_hex] = symmetric_key
+        DECRYPTED_SESSIONS_CACHE.set(cache_key, symmetric_key)
+
+        # Log session establishment
+        try:
+            from mqtt_bridge import log_event
+            log_event("PQC", "INF", f"Established/rekeyed PQC session using {kem_algo} and {sig_algo} for device {device_id}")
+        except Exception:
+            pass
 
     # 3. Decrypt payload validating the AAD
     # Re-construct identical AAD dictionary using canonical serialization

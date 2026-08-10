@@ -103,21 +103,23 @@ def compute_optimal_sig(cpu, ram, battery, threat_score, stats):
     0: ML-DSA-44, 1: FN-DSA-512
     """
     sig_dsa = stats.get("ML-DSA-44", {
-        "keygen_ms": 0.44, "memory_mb": 0.04, "signature_size": 2420
+        "sign_ms": 1.64, "memory_mb": 0.04, "signature_size": 2420
     })
     sig_fn = stats.get("FN-DSA-512", {
-        "keygen_ms": 29.45, "memory_mb": 0.17, "signature_size": 662
+        "sign_ms": 13.71, "memory_mb": 0.17, "signature_size": 662
     })
 
-    w_security = 8.0 * threat_score
-    w_battery = 0.05 * (100.0 - battery)
-    w_cpu = 0.02 * cpu
-    w_bandwidth = 0.005
-    w_latency = 0.5
+    w_security = 16.5699 * threat_score
+    w_battery = 0.1503 * (100.0 - battery)
+    w_cpu = 0.0239 * cpu
+    w_bandwidth = 0.0054
+    w_latency = 0.8450
 
-    # Utility = Security_Level - (Latency_Cost + Battery_Cost + CPU_Cost + Bandwidth_Cost)
-    u_dsa = (w_security * 1.0) - (w_latency * sig_dsa["keygen_ms"] + w_battery * 1.5 + w_cpu * 1.0 + w_bandwidth * sig_dsa["signature_size"])
-    u_fn = (w_security * 1.0) - (w_latency * sig_fn["keygen_ms"] + w_battery * 3.0 + w_cpu * 5.0 + w_bandwidth * sig_fn["signature_size"])
+    # Utility = Security - (Latency_Cost + Battery_Cost + CPU_Cost + Bandwidth_Cost)
+    # ML-DSA-44 has Category 2 security (represented as 2.0)
+    # FN-DSA-512 has Category 1 security (represented as 1.0)
+    u_dsa = (w_security * 2.0) - (w_latency * sig_dsa.get("sign_ms", 1.64) + w_battery * 1.5 + w_cpu * 1.0 + w_bandwidth * sig_dsa["signature_size"])
+    u_fn = (w_security * 1.0) - (w_latency * sig_fn.get("sign_ms", 13.71) + w_battery * 0.4 + w_cpu * 0.3 + w_bandwidth * sig_fn["signature_size"])
     
     return 1 if u_fn > u_dsa else 0
 

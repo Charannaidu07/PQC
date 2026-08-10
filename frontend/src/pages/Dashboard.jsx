@@ -223,18 +223,18 @@ function Dashboard() {
             <div className="card-body p-3 d-flex flex-column justify-content-between">
               <div>
                 <h6 className="text-secondary text-uppercase font-monospace fw-bold mb-2" style={{ fontSize: "0.7rem" }}>
-                  Avg PQC RAM Footprint
+                  Avg Incremental Process RSS
                 </h6>
                 <h3 className="stats-number mb-1" style={{ fontSize: "1.4rem" }}>
                   {stats.avg_pqc_mem_mb || 0} <span style={{ fontSize: "0.9rem" }}>MB</span>
                 </h3>
                 <p className="text-secondary mb-0" style={{ fontSize: "0.75rem" }}>
-                  Static heap overhead of PQC enclaves.
+                  Incremental process RSS during benchmark.
                 </p>
               </div>
               <div className="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25 text-start py-1 px-2 mt-2" style={{ fontSize: "0.7rem" }}>
                 <i className="bi bi-shield-exclamation text-warning me-1"></i>
-                Dilithium2 requires larger keys
+                ML-DSA-44 requires larger keys
               </div>
             </div>
           </div>

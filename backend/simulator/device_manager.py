@@ -2,10 +2,14 @@ import asyncio
 import json
 import random
 import sys
+import os
 import logging
 import math
 from datetime import datetime
 from typing import Dict, Any
+
+# Add parent directory to path to allow direct execution
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import paho.mqtt.client as mqtt
 
@@ -104,12 +108,23 @@ class VirtualDevice:
         self.requests_per_minute = random.uniform(5, 15)
         
         # Replay protection & session caching
-        self.sequence_number = 0
+        # Initialize sequence_number from DB to prevent restart synchronization bugs
+        from database import SessionLocal, Device
+        session = SessionLocal()
+        try:
+            dev = session.query(Device).filter(Device.device_id == device_id).first()
+            self.sequence_number = dev.last_sequence if (dev and dev.last_sequence is not None) else 0
+        except Exception:
+            self.sequence_number = 0
+        finally:
+            session.close()
+            
         self.session_key = None
         self.session_kem_ciphertext = None
         self.session_packets_sent = 0
         self.session_kem_algo = None
         self.session_sig_algo = None
+        self.session_start_time = None
         
         # Stateful Attack parameters
         # States: "NORMAL", "RECONNAISSANCE", "ATTACKING", "MITIGATED"
@@ -158,6 +173,7 @@ class VirtualDevice:
         self.session_packets_sent = 0
         self.session_kem_algo = None
         self.session_sig_algo = None
+        self.session_start_time = None
         
     def generate_payload(self) -> Dict[str, Any]:
         """Generate sensor data payload with diurnal cycles, thermal heating, PQC overhead, and state transitions"""
@@ -170,19 +186,18 @@ class VirtualDevice:
         # Sync selected algorithm from DB if possible to model correct battery overhead
         try:
             from database import SessionLocal, Device
-            session = SessionLocal()
-            dev = session.query(Device).filter(Device.device_id == self.device_id).first()
-            if dev:
-                self.selected_kem = dev.selected_kem or "ML-KEM-512"
-                self.selected_signature = dev.selected_signature or "ML-DSA-44"
-                
-                # Check and register signature public keys in DB if missing
-                if not dev.sig_public_key_ml_dsa_44 or not dev.sig_public_key_fn_dsa_512:
-                    if self.sig_keys:
-                        dev.sig_public_key_ml_dsa_44 = self.sig_keys.get("ML-DSA-44", {}).get("public_key")
-                        dev.sig_public_key_fn_dsa_512 = self.sig_keys.get("FN-DSA-512", {}).get("public_key")
-                        session.commit()
-            session.close()
+            with SessionLocal() as session:
+                dev = session.query(Device).filter(Device.device_id == self.device_id).first()
+                if dev:
+                    self.selected_kem = dev.selected_kem or "ML-KEM-512"
+                    self.selected_signature = dev.selected_signature or "ML-DSA-44"
+                    
+                    # Check and register signature public keys in DB if missing
+                    if not dev.sig_public_key_ml_dsa_44 or not dev.sig_public_key_fn_dsa_512:
+                        if self.sig_keys:
+                            dev.sig_public_key_ml_dsa_44 = self.sig_keys.get("ML-DSA-44", {}).get("public_key")
+                            dev.sig_public_key_fn_dsa_512 = self.sig_keys.get("FN-DSA-512", {}).get("public_key")
+                            session.commit()
         except Exception as e:
             logger.error(f"Error syncing device keys to database: {e}")
             
@@ -229,11 +244,10 @@ class VirtualDevice:
             is_blocked = False
             try:
                 from database import SessionLocal, Device
-                session = SessionLocal()
-                dev = session.query(Device).filter(Device.device_id == self.device_id).first()
-                if dev and dev.status == "BLOCKED":
-                    is_blocked = True
-                session.close()
+                with SessionLocal() as session:
+                    dev = session.query(Device).filter(Device.device_id == self.device_id).first()
+                    if dev and dev.status == "BLOCKED":
+                        is_blocked = True
             except Exception:
                 pass
                 
@@ -257,14 +271,13 @@ class VirtualDevice:
                 self.attack_type = None
                 try:
                     from database import SessionLocal, Device
-                    session = SessionLocal()
-                    dev = session.query(Device).filter(Device.device_id == self.device_id).first()
-                    if dev and dev.status == "BLOCKED":
-                        dev.status = "ONLINE"
-                        session.commit()
-                        from mqtt_bridge import log_event
-                        log_event("SOC", "INF", f"Device {self.device_id} firewall block expired. Restored online.")
-                    session.close()
+                    with SessionLocal() as session:
+                        dev = session.query(Device).filter(Device.device_id == self.device_id).first()
+                        if dev and dev.status == "BLOCKED":
+                            dev.status = "ONLINE"
+                            session.commit()
+                            from mqtt_bridge import log_event
+                            log_event("SOC", "INF", f"Device {self.device_id} firewall block expired. Restored online.")
                 except Exception:
                     pass
 
@@ -284,6 +297,9 @@ class VirtualDevice:
         self.temperature += (target_temp - self.temperature) * 0.15  # Thermal inertia
         
         # 4. Battery drain model with PQC overhead
+        # NOTE ON MODEL ASSUMPTIONS:
+        # These battery drain coefficients are synthetic, modeled simulation assumptions
+        # representing relative energy overheads of PQC algorithms, not physically measured joules.
         pqc_drain_rates = {
             "ML-KEM-512": 0.001,
             "ML-KEM-768": 0.003,
@@ -363,9 +379,21 @@ async def device_loop(device: VirtualDevice, mqtt_client: MQTTClient):
                     
                 sig_private_key = device.sig_keys[sig_algo]["private_key"]
                 
-                # Session key caching, rotation (every 20 packets), and renegotiation on algorithm switch
+                # Session key caching, rotation, and renegotiation on algorithm switch.
+                # Rekeying policy justifies PFS security in constrained IoT environments:
+                # - Maximum 20 messages per session to limit plaintext exposure under a single symmetric key.
+                # - Maximum 180 seconds (3 minutes) lifetime to ensure keys expire even with delayed/dropped packets.
+                import time as pytime
+                session_expired = False
+                if device.session_start_time is not None:
+                    if pytime.time() - device.session_start_time >= 180.0:
+                        session_expired = True
+                        
+                if device.session_packets_sent >= 20:
+                    session_expired = True
+
                 if (device.session_key is not None and 
-                    device.session_packets_sent < 20 and 
+                    not session_expired and
                     kem_algo == device.session_kem_algo and 
                     sig_algo == device.session_sig_algo):
                     
@@ -393,6 +421,7 @@ async def device_loop(device: VirtualDevice, mqtt_client: MQTTClient):
                     device.session_kem_algo = kem_algo
                     device.session_sig_algo = sig_algo
                     device.session_packets_sent = 1
+                    device.session_start_time = pytime.time()
                 
                 # Pop session_key local metadata
                 secured_payload.pop("session_key", None)

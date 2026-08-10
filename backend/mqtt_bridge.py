@@ -19,8 +19,6 @@ MQTT_BROKER = "localhost"
 MQTT_PORT = 1883
 MQTT_TOPIC = "iot/data"
 
-db = SessionLocal()
-
 # Global Thread-Safe Log Buffer
 SYSTEM_LOGS = []
 
@@ -38,11 +36,12 @@ def log_event(service: str, level: str, msg: str):
     print(f"[{timestamp}] [{level}] [{service}] {msg}")
 
 def process_payload(payload: dict):
-    try:
-        device_id = payload.get("device_id")
-        if not device_id:
-            return
+    device_id = payload.get("device_id")
+    if not device_id:
+        return
 
+    db = SessionLocal()
+    try:
         # 0. Handle PQC Secure Channel Decryption & Verification
         is_encrypted = "encrypted_payload" in payload
         raw_telemetry = payload
@@ -90,9 +89,22 @@ def process_payload(payload: dict):
                 timestamp_str = raw_telemetry.get("timestamp")
                 
                 if existing_device:
-                    last_seq = existing_device.last_sequence or 0
-                    if sequence <= last_seq:
-                        raise ValueError(f"Replay attack detected: packet sequence {sequence} <= last seen sequence {last_seq}")
+                    # Atomic replay protection check & update
+                    from sqlalchemy import text
+                    stmt = text(
+                        "UPDATE devices "
+                        "SET last_sequence = :seq "
+                        "WHERE device_id = :device_id AND (last_sequence < :seq OR last_sequence IS NULL)"
+                    )
+                    result = db.execute(stmt, {"seq": sequence, "device_id": device_id})
+                    if result.rowcount == 0:
+                        dev_exists = db.query(Device).filter(Device.device_id == device_id).first()
+                        if not dev_exists:
+                            raise ValueError(f"Device {device_id} not found in database.")
+                        else:
+                            raise ValueError(f"Replay attack detected: sequence {sequence} <= last seen sequence {dev_exists.last_sequence}")
+                    
+                    db.expire(existing_device, ['last_sequence'])
                     
                     if timestamp_str:
                         packet_time = datetime.fromisoformat(timestamp_str)
@@ -126,7 +138,7 @@ def process_payload(payload: dict):
         attack_type = raw_telemetry.get("attack_type")
 
         # 2. Run AI Threat Detector
-        result = detect_threat(raw_telemetry)
+        result = detect_threat(raw_telemetry, db=db)
         is_threat = result.get("threat", False)
         severity = result.get("severity", "LOW")
         confidence = result.get("confidence", 0.0)
@@ -162,21 +174,14 @@ def process_payload(payload: dict):
 
         # 5. Save device state in DB and log cryptographic validations
         if existing_device:
-            # Check for PQC key rotation/reconfiguration
-            old_kem = existing_device.selected_kem
-            old_sig = existing_device.selected_signature
-            
-            if old_kem != selected_kem or old_sig != selected_sig:
-                log_event("PQC", "INF", f"Session keypair rotated and communication reconfigured to {selected_kem} + {selected_sig} for device {device_id}")
-            else:
-                # Log successful decryption on normal packets occasionally to prevent flood
-                rand = random.random()
-                if rand < 0.005:
-                    log_event("KEM", "INF", f"Decrypted telemetry successfully via {selected_kem} session key on device {device_id}")
-                elif rand < 0.010:
-                    log_event("SIG", "INF", f"Validated authentic telemetry signature using {selected_sig} on device {device_id}")
-                elif rand < 0.012:
-                    log_event("PQC", "INF", f"PQC communication channels verified for {device_id} ({selected_kem} + {selected_sig})")
+            # Log successful decryption on normal packets occasionally to prevent flood
+            rand = random.random()
+            if rand < 0.005:
+                log_event("KEM", "INF", f"Decrypted telemetry successfully via {selected_kem} session key on device {device_id}")
+            elif rand < 0.010:
+                log_event("SIG", "INF", f"Validated authentic telemetry signature using {selected_sig} on device {device_id}")
+            elif rand < 0.012:
+                log_event("PQC", "INF", f"PQC communication channels verified for {device_id} ({selected_kem} + {selected_sig})")
 
             existing_device.cpu_usage = cpu_usage
             existing_device.memory_usage = memory_usage
@@ -185,8 +190,6 @@ def process_payload(payload: dict):
             existing_device.selected_signature = selected_sig
             existing_device.last_seen = datetime.utcnow()
             existing_device.status = status
-            if is_encrypted:
-                existing_device.last_sequence = raw_telemetry.get("sequence", 0)
             db.commit()
         else:
             # Unregistered devices are completely blocked to prevent spoofing / Sybil attacks
@@ -194,7 +197,10 @@ def process_payload(payload: dict):
             return
 
     except Exception as e:
+        db.rollback()
         print(f"Error in process_payload: {e}")
+    finally:
+        db.close()
 
 def on_connect(client, userdata, flags, rc):
     if rc == 0:

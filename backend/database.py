@@ -350,86 +350,24 @@ def get_db():
 # CREATE TABLES
 # =====================================================
 
-def run_migrations():
-    """Runs schema migrations on the database to add missing fields/columns."""
-    from sqlalchemy import text
-    try:
-        with engine.begin() as conn:
-            # Query first row to see if columns are present
-            res = conn.execute(text("SELECT * FROM devices LIMIT 1"))
-            columns = res.keys()
-            
-            # Check and add sig_public_key_ml_dsa_44
-            if "sig_public_key_ml_dsa_44" not in columns:
-                print("Adding column sig_public_key_ml_dsa_44 to table devices...")
-                conn.execute(text("ALTER TABLE devices ADD COLUMN sig_public_key_ml_dsa_44 VARCHAR(2500)"))
-                if "sig_public_key_dilithium2" in columns:
-                    conn.execute(text("UPDATE devices SET sig_public_key_ml_dsa_44 = sig_public_key_dilithium2"))
-                
-            # Check and add sig_public_key_fn_dsa_512
-            if "sig_public_key_fn_dsa_512" not in columns:
-                print("Adding column sig_public_key_fn_dsa_512 to table devices...")
-                conn.execute(text("ALTER TABLE devices ADD COLUMN sig_public_key_fn_dsa_512 VARCHAR(2500)"))
-                if "sig_public_key_falcon512" in columns:
-                    conn.execute(text("UPDATE devices SET sig_public_key_fn_dsa_512 = sig_public_key_falcon512"))
-                
-            # Check and add last_sequence
-            if "last_sequence" not in columns:
-                print("Adding column last_sequence to table devices...")
-                conn.execute(text("ALTER TABLE devices ADD COLUMN last_sequence INTEGER DEFAULT 0"))
-                
-    except Exception as e:
-        print(f"Database migration error: {e}")
-
-def run_benchmark_migrations():
-    """Runs schema migrations to add statistical columns to benchmark_results table."""
-    from sqlalchemy import text
-    try:
-        with engine.begin() as conn:
-            res = conn.execute(text("SELECT * FROM benchmark_results LIMIT 1"))
-            columns = res.keys()
-            
-            prefixes = ["keygen", "encap", "decap", "sign", "verify"]
-            suffixes = ["mean_ms", "median_ms", "std_ms", "p95_ms", "p99_ms", "min_ms", "max_ms"]
-            
-            for prefix in prefixes:
-                for suffix in suffixes:
-                    col_name = f"{prefix}_{suffix}"
-                    if col_name not in columns:
-                        print(f"Adding column {col_name} to table benchmark_results...")
-                        conn.execute(text(f"ALTER TABLE benchmark_results ADD COLUMN {col_name} FLOAT"))
-    except Exception as e:
-        print(f"Database benchmark migration error: {e}")
-
-def run_benchmark_size_migrations():
-    """Runs schema migrations to add key/ciphertext/signature size columns to benchmark_results table."""
-    from sqlalchemy import text
-    try:
-        with engine.begin() as conn:
-            res = conn.execute(text("SELECT * FROM benchmark_results LIMIT 1"))
-            columns = res.keys()
-            
-            size_cols = [
-                "pub_key_size_bytes",
-                "secret_key_size_bytes",
-                "ciphertext_size_bytes",
-                "shared_secret_size_bytes",
-                "signature_size_bytes"
-            ]
-            
-            for col in size_cols:
-                if col not in columns:
-                    print(f"Adding column {col} to table benchmark_results...")
-                    conn.execute(text(f"ALTER TABLE benchmark_results ADD COLUMN {col} INTEGER"))
-    except Exception as e:
-        print(f"Database benchmark size migration error: {e}")
-
 def init_db():
+    import os
+    from alembic.config import Config
+    from alembic import command
 
+    # Create tables defined in SQLAlchemy models if they do not exist
     Base.metadata.create_all(bind=engine)
-    run_migrations()
-    run_benchmark_migrations()
-    run_benchmark_size_migrations()
+    
+    # Run Alembic migrations programmatically to apply updates & clean legacy columns
+    try:
+        backend_dir = os.path.dirname(os.path.abspath(__file__))
+        ini_path = os.path.join(backend_dir, "alembic.ini")
+        alembic_cfg = Config(ini_path)
+        alembic_cfg.set_main_option("script_location", os.path.join(backend_dir, "alembic"))
+        command.upgrade(alembic_cfg, "head")
+        print("Database migrations applied successfully via Alembic.")
+    except Exception as e:
+        print(f"Failed to run Alembic database migrations: {e}")
 
     print("QuantumShield Database Initialized")
 

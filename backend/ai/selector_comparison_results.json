@@ -24,25 +24,25 @@
     },
     "sig": {
         "ML-DSA-44": {
-            "latency_ms": 0.4725,
+            "latency_ms": 1.6371,
             "memory_mb": 0.0,
             "bandwidth_bytes": 2420.0,
             "energy_cost": 1.5,
-            "security_level": 1.0
+            "security_level": 2.0
         },
         "FN-DSA-512": {
-            "latency_ms": 125.3746,
+            "latency_ms": 13.7074,
             "memory_mb": 0.01,
             "bandwidth_bytes": 653.0,
             "energy_cost": 3.0,
             "security_level": 1.0
         },
         "Adaptive": {
-            "latency_ms": 0.4725,
-            "memory_mb": 0.0,
-            "bandwidth_bytes": 2420.0,
-            "energy_cost": 1.5,
-            "security_level": 1.0
+            "latency_ms": 7.793,
+            "memory_mb": 0.0051,
+            "bandwidth_bytes": 1518.8,
+            "energy_cost": 2.27,
+            "security_level": 1.49
         }
     }
 }

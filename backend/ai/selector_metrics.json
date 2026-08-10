@@ -15,12 +15,17 @@
         ]
     },
     "sig": {
-        "accuracy": 1.0,
-        "f1_macro": 1.0,
-        "cross_validation_mean": 1.0,
+        "accuracy": 0.982,
+        "f1_macro": 0.9819878237688677,
+        "cross_validation_mean": 0.9794,
         "confusion_matrix": [
             [
-                1000
+                478,
+                12
+            ],
+            [
+                6,
+                504
             ]
         ]
     }
