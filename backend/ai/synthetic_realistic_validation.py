@@ -208,65 +208,132 @@ def run_validation():
         
     model = joblib.load(model_path)
     
-    # 2. Get dataset (try real TON_IoT first, fallback to synthetic if offline)
-    df, ds_name = load_real_ton_iot_validation_dataset()
-    if df is None:
-        df = generate_synthetic_realistic_validation_dataset()
-        ds_name = "Synthetic Realistic Validation Telemetry (Fallback)"
+    # PHASE 1: Real-World 3-Class Cross-Dataset Validation (UNSW TON_IoT)
+    print("\n--- Phase 1: Real-World 3-Class Cross-Dataset Validation (UNSW TON_IoT) ---")
+    df_real, ds_name_real = load_real_ton_iot_validation_dataset()
+    real_metrics = None
+    
+    if df_real is not None:
+        X_real = df_real.drop("attack", axis=1)
+        y_true_real = df_real["attack"]
+        y_pred_real = model.predict(X_real)
         
-    X = df.drop("attack", axis=1)
-    y_true = df["attack"]
+        accuracy_real = accuracy_score(y_true_real, y_pred_real)
+        balanced_acc_real = balanced_accuracy_score(y_true_real, y_pred_real)
+        precision_real, recall_real, f1_real, _ = precision_recall_fscore_support(
+            y_true_real, y_pred_real, average='weighted', zero_division=0
+        )
+        macro_prec_real, macro_rec_real, macro_f1_real, _ = precision_recall_fscore_support(
+            y_true_real, y_pred_real, average='macro', zero_division=0
+        )
+        conf_mat_real = confusion_matrix(y_true_real, y_pred_real).tolist()
+        
+        target_names = ["Normal", "DDoS", "Cryptojacking", "Thermal Tampering", "Reconnaissance"]
+        labels_present_real = np.unique(np.concatenate((y_true_real, y_pred_real)))
+        target_names_real = [target_names[i] for i in labels_present_real]
+        report_real = classification_report(
+            y_true_real, y_pred_real, labels=labels_present_real, 
+            target_names=target_names_real, output_dict=True
+        )
+        
+        real_metrics = {
+            "dataset_name": ds_name_real,
+            "samples_evaluated": len(df_real),
+            "accuracy": float(accuracy_real),
+            "balanced_accuracy": float(balanced_acc_real),
+            "precision_weighted": float(precision_real),
+            "recall_weighted": float(recall_real),
+            "f1_weighted": float(f1_real),
+            "precision_macro": float(macro_prec_real),
+            "macro_recall": float(macro_rec_real),
+            "f1_macro": float(macro_f1_real),
+            "confusion_matrix": conf_mat_real,
+            "classification_report": report_real,
+            "methodology_notes": (
+                "Evaluates the model on the three classes overlapping with raw network dataset: "
+                "Normal, DDoS, and Reconnaissance. Network packets are mapped to requests_per_minute, "
+                "and physical CPU/RAM/temperature signatures are projected based on traffic load constraints."
+            )
+        }
+        
+    # PHASE 2: Controlled 5-Class Simulator Telemetry Validation
+    print("\n--- Phase 2: Controlled 5-Class Simulator Telemetry Validation (All Classes) ---")
+    df_syn = generate_synthetic_realistic_validation_dataset()
+    ds_name_syn = "Controlled 5-Class Realistic Telemetry Validation"
     
-    # 3. Evaluate model
-    y_pred = model.predict(X)
+    X_syn = df_syn.drop("attack", axis=1)
+    y_true_syn = df_syn["attack"]
+    y_pred_syn = model.predict(X_syn)
     
-    # 4. Calculate metrics
-    accuracy = accuracy_score(y_true, y_pred)
-    balanced_acc = balanced_accuracy_score(y_true, y_pred)
-    precision, recall, f1, _ = precision_recall_fscore_support(y_true, y_pred, average='weighted', zero_division=0)
-    macro_prec, macro_rec, macro_f1, _ = precision_recall_fscore_support(y_true, y_pred, average='macro', zero_division=0)
-    conf_mat = confusion_matrix(y_true, y_pred).tolist()
+    accuracy_syn = accuracy_score(y_true_syn, y_pred_syn)
+    balanced_acc_syn = balanced_accuracy_score(y_true_syn, y_pred_syn)
+    precision_syn, recall_syn, f1_syn, _ = precision_recall_fscore_support(
+        y_true_syn, y_pred_syn, average='weighted', zero_division=0
+    )
+    macro_prec_syn, macro_rec_syn, macro_f1_syn, _ = precision_recall_fscore_support(
+        y_true_syn, y_pred_syn, average='macro', zero_division=0
+    )
+    conf_mat_syn = confusion_matrix(y_true_syn, y_pred_syn).tolist()
     
-    target_names = ["Normal", "DDoS", "Cryptojacking", "Thermal Tampering", "Reconnaissance"]
-    # Handle potentially missing classes in evaluation report
-    labels_present = np.unique(np.concatenate((y_true, y_pred)))
-    target_names_present = [target_names[i] for i in labels_present]
-    report = classification_report(y_true, y_pred, labels=labels_present, target_names=target_names_present, output_dict=True)
+    labels_present_syn = np.unique(np.concatenate((y_true_syn, y_pred_syn)))
+    target_names_syn = [target_names[i] for i in labels_present_syn]
+    report_syn = classification_report(
+        y_true_syn, y_pred_syn, labels=labels_present_syn, 
+        target_names=target_names_syn, output_dict=True
+    )
     
-    # 5. Format output metrics
-    metrics_data = {
-        "dataset_name": ds_name,
-        "samples_evaluated": len(df),
-        "accuracy": float(accuracy),
-        "balanced_accuracy": float(balanced_acc),
-        "precision_weighted": float(precision),
-        "recall_weighted": float(recall),
-        "f1_weighted": float(f1),
-        "precision_macro": float(macro_prec),
-        "macro_recall": float(macro_rec),
-        "f1_macro": float(macro_f1),
-        "confusion_matrix": conf_mat,
-        "classification_report": report
+    syn_metrics = {
+        "dataset_name": ds_name_syn,
+        "samples_evaluated": len(df_syn),
+        "accuracy": float(accuracy_syn),
+        "balanced_accuracy": float(balanced_acc_syn),
+        "precision_weighted": float(precision_syn),
+        "recall_weighted": float(recall_syn),
+        "f1_weighted": float(f1_syn),
+        "precision_macro": float(macro_prec_syn),
+        "macro_recall": float(macro_rec_syn),
+        "f1_macro": float(macro_f1_syn),
+        "confusion_matrix": conf_mat_syn,
+        "classification_report": report_syn,
+        "methodology_notes": (
+            "Evaluates the complete five-class model (Normal, DDoS, Cryptojacking, Thermal Tampering, Reconnaissance) "
+            "using realistic simulator logs incorporating random sensor dropout, Gaussian noise, and thermal anomalies."
+        )
     }
     
-    # Save to metrics file
+    # 5. Format and Save Output Metrics
+    metrics_data = {
+        "real_world_evaluation": real_metrics,
+        "synthetic_controlled_evaluation": syn_metrics
+    }
+    
     out_path = os.path.join(backend_dir, "ai/synthetic_realistic_validation_metrics.json")
     with open(out_path, "w") as f:
         json.dump(metrics_data, f, indent=4)
         
     print("\n====================================================")
-    print("      SYNTHETIC / REAL IOT DATASET VALIDATION")
+    print("           DUAL THREAT VALIDATION REPORT")
     print("====================================================")
-    print(f"Target Dataset: {metrics_data['dataset_name']}")
-    print(f"Accuracy: {accuracy:.4%}")
-    print(f"Balanced Accuracy: {balanced_acc:.4%}")
-    print(f"F1-Score (Macro): {macro_f1:.4%}")
-    print("\nClassification Report:")
-    print(classification_report(y_true, y_pred, labels=labels_present, target_names=target_names_present))
+    
+    if real_metrics:
+        print(f"\n1. REAL-WORLD CROSS-DATASET VALIDATION (3-Class):")
+        print(f"   Target Dataset: {real_metrics['dataset_name']}")
+        print(f"   Accuracy: {accuracy_real:.4%}")
+        print(f"   Balanced Accuracy: {balanced_acc_real:.4%}")
+        print(f"   F1-Score (Macro): {macro_f1_real:.4%}")
+        print("   Methodology: Features are projected from raw traffic metrics. Validates Normal, DDoS, and Recon.")
+        print("\nClassification Report (Real-World):")
+        print(classification_report(y_true_real, y_pred_real, labels=labels_present_real, target_names=target_names_real))
+        
+    print(f"\n2. CONTROLLED SIMULATOR TELEMETRY VALIDATION (5-Class):")
+    print(f"   Target Dataset: {syn_metrics['dataset_name']}")
+    print(f"   Accuracy: {accuracy_syn:.4%}")
+    print(f"   Balanced Accuracy: {balanced_acc_syn:.4%}")
+    print(f"   F1-Score (Macro): {macro_f1_syn:.4%}")
+    print("   Methodology: Controlled realistic simulation log evaluation including Cryptojacking & Thermal attacks.")
+    print("\nClassification Report (Controlled):")
+    print(classification_report(y_true_syn, y_pred_syn, labels=labels_present_syn, target_names=target_names_syn))
     print("====================================================\n")
-
-if __name__ == "__main__":
-    run_validation()
 
 if __name__ == "__main__":
     run_validation()

@@ -1,62 +1,160 @@
 {
-    "dataset_name": "UNSW TON_IoT Network Telemetry (Cross-Dataset)",
-    "samples_evaluated": 2123,
-    "accuracy": 0.8115873763542157,
-    "balanced_accuracy": 0.8737373737373737,
-    "precision_weighted": 0.8944061120226924,
-    "recall_weighted": 0.8115873763542157,
-    "f1_weighted": 0.8161135450807334,
-    "precision_macro": 0.8534798534798534,
-    "macro_recall": 0.8737373737373737,
-    "f1_macro": 0.8282216664472818,
-    "confusion_matrix": [
-        [
-            656,
-            0,
-            400
-        ],
-        [
-            0,
-            557,
-            0
-        ],
-        [
-            0,
-            0,
-            510
-        ]
-    ],
-    "classification_report": {
-        "Normal": {
-            "precision": 1.0,
-            "recall": 0.6212121212121212,
-            "f1-score": 0.7663551401869159,
-            "support": 1056.0
-        },
-        "DDoS": {
-            "precision": 1.0,
-            "recall": 1.0,
-            "f1-score": 1.0,
-            "support": 557.0
-        },
-        "Reconnaissance": {
-            "precision": 0.5604395604395604,
-            "recall": 1.0,
-            "f1-score": 0.7183098591549296,
-            "support": 510.0
-        },
+    "real_world_evaluation": {
+        "dataset_name": "UNSW TON_IoT Network Telemetry (Cross-Dataset)",
+        "samples_evaluated": 2123,
         "accuracy": 0.8115873763542157,
-        "macro avg": {
-            "precision": 0.8534798534798534,
-            "recall": 0.8737373737373737,
-            "f1-score": 0.8282216664472818,
-            "support": 2123.0
+        "balanced_accuracy": 0.8737373737373737,
+        "precision_weighted": 0.8944061120226924,
+        "recall_weighted": 0.8115873763542157,
+        "f1_weighted": 0.8161135450807334,
+        "precision_macro": 0.8534798534798534,
+        "macro_recall": 0.8737373737373737,
+        "f1_macro": 0.8282216664472818,
+        "confusion_matrix": [
+            [
+                656,
+                0,
+                400
+            ],
+            [
+                0,
+                557,
+                0
+            ],
+            [
+                0,
+                0,
+                510
+            ]
+        ],
+        "classification_report": {
+            "Normal": {
+                "precision": 1.0,
+                "recall": 0.6212121212121212,
+                "f1-score": 0.7663551401869159,
+                "support": 1056.0
+            },
+            "DDoS": {
+                "precision": 1.0,
+                "recall": 1.0,
+                "f1-score": 1.0,
+                "support": 557.0
+            },
+            "Reconnaissance": {
+                "precision": 0.5604395604395604,
+                "recall": 1.0,
+                "f1-score": 0.7183098591549296,
+                "support": 510.0
+            },
+            "accuracy": 0.8115873763542157,
+            "macro avg": {
+                "precision": 0.8534798534798534,
+                "recall": 0.8737373737373737,
+                "f1-score": 0.8282216664472818,
+                "support": 2123.0
+            },
+            "weighted avg": {
+                "precision": 0.8944061120226924,
+                "recall": 0.8115873763542157,
+                "f1-score": 0.8161135450807334,
+                "support": 2123.0
+            }
         },
-        "weighted avg": {
-            "precision": 0.8944061120226924,
-            "recall": 0.8115873763542157,
-            "f1-score": 0.8161135450807334,
-            "support": 2123.0
-        }
+        "methodology_notes": "Evaluates the model on the three classes overlapping with raw network dataset: Normal, DDoS, and Reconnaissance. Network packets are mapped to requests_per_minute, and physical CPU/RAM/temperature signatures are projected based on traffic load constraints."
+    },
+    "synthetic_controlled_evaluation": {
+        "dataset_name": "Controlled 5-Class Realistic Telemetry Validation",
+        "samples_evaluated": 3000,
+        "accuracy": 0.9976666666666667,
+        "balanced_accuracy": 0.9934272300469484,
+        "precision_weighted": 0.9976751780441203,
+        "recall_weighted": 0.9976666666666667,
+        "f1_weighted": 0.9976493075477925,
+        "precision_macro": 0.9992704533611256,
+        "macro_recall": 0.9934272300469484,
+        "f1_macro": 0.9962932713842421,
+        "confusion_matrix": [
+            [
+                1912,
+                0,
+                0,
+                0,
+                0
+            ],
+            [
+                0,
+                366,
+                0,
+                0,
+                0
+            ],
+            [
+                0,
+                0,
+                257,
+                0,
+                0
+            ],
+            [
+                0,
+                0,
+                0,
+                252,
+                0
+            ],
+            [
+                7,
+                0,
+                0,
+                0,
+                206
+            ]
+        ],
+        "classification_report": {
+            "Normal": {
+                "precision": 0.9963522668056279,
+                "recall": 1.0,
+                "f1-score": 0.998172800835291,
+                "support": 1912.0
+            },
+            "DDoS": {
+                "precision": 1.0,
+                "recall": 1.0,
+                "f1-score": 1.0,
+                "support": 366.0
+            },
+            "Cryptojacking": {
+                "precision": 1.0,
+                "recall": 1.0,
+                "f1-score": 1.0,
+                "support": 257.0
+            },
+            "Thermal Tampering": {
+                "precision": 1.0,
+                "recall": 1.0,
+                "f1-score": 1.0,
+                "support": 252.0
+            },
+            "Reconnaissance": {
+                "precision": 1.0,
+                "recall": 0.9671361502347418,
+                "f1-score": 0.9832935560859188,
+                "support": 213.0
+            },
+            "accuracy": 0.9976666666666667,
+            "macro avg": {
+                "precision": 0.9992704533611256,
+                "recall": 0.9934272300469484,
+                "f1-score": 0.9962932713842421,
+                "support": 3000.0
+            },
+            "weighted avg": {
+                "precision": 0.9976751780441203,
+                "recall": 0.9976666666666667,
+                "f1-score": 0.9976493075477925,
+                "support": 3000.0
+            }
+        },
+        "methodology_notes": "Evaluates the complete five-class model (Normal, DDoS, Cryptojacking, Thermal Tampering, Reconnaissance) using realistic simulator logs incorporating random sensor dropout, Gaussian noise, and thermal anomalies."
     }
 }
