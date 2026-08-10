@@ -89,7 +89,14 @@ def process_payload(payload: dict):
                 timestamp_str = raw_telemetry.get("timestamp")
                 
                 if existing_device:
-                    # Atomic replay protection check & update
+                    # 1a. Validate timestamp first to prevent desynchronization attacks
+                    if timestamp_str:
+                        packet_time = datetime.fromisoformat(timestamp_str)
+                        time_diff = abs((datetime.utcnow() - packet_time).total_seconds())
+                        if time_diff > 120.0:  # Allow 2 minutes window to account for minor clock skew
+                            raise ValueError(f"Replay/timestamp skew detected: packet timestamp {timestamp_str} is outside the allowed window (skew: {time_diff:.1f}s)")
+                            
+                    # 1b. Atomic replay protection check & update (sequence check)
                     from sqlalchemy import text
                     stmt = text(
                         "UPDATE devices "
@@ -105,12 +112,6 @@ def process_payload(payload: dict):
                             raise ValueError(f"Replay attack detected: sequence {sequence} <= last seen sequence {dev_exists.last_sequence}")
                     
                     db.expire(existing_device, ['last_sequence'])
-                    
-                    if timestamp_str:
-                        packet_time = datetime.fromisoformat(timestamp_str)
-                        time_diff = abs((datetime.utcnow() - packet_time).total_seconds())
-                        if time_diff > 120.0:  # Allow 2 minutes window to account for minor clock skew
-                            raise ValueError(f"Replay attack detected: packet timestamp {timestamp_str} is outside the allowed window (skew: {time_diff:.1f}s)")
                 
             except Exception as e:
                 log_event("SOC", "ERR", f"PQC Decryption/Signature verification failed for device {device_id}: {e}")
