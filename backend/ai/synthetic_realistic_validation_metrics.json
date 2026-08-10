@@ -1,6 +1,6 @@
 {
     "real_world_evaluation": {
-        "dataset_name": "UNSW TON_IoT Network Telemetry (Cross-Dataset)",
+        "dataset_name": "UNSW TON_IoT Network Telemetry (Cross-Dataset Slice)",
         "samples_evaluated": 2123,
         "accuracy": 0.8115873763542157,
         "balanced_accuracy": 0.8737373737373737,

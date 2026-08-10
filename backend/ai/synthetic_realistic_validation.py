@@ -23,50 +23,23 @@ sys.path.append(backend_dir)
 
 def load_real_ton_iot_validation_dataset():
     """
-    Downloads subsets of the actual raw UNSW TON_IoT dataset (normal and attack slices)
-    using HTTP Range requests, maps network/traffic features to our target resource and
-    telemetry features, handles missing values, and maps target intrusion labels.
+    Loads the local UNSW TON_IoT dataset slice from backend/datasets/TON_IoT/Train_Test_Network.csv,
+    maps network/traffic features to our target resource and telemetry features, handles
+    missing values, and maps target intrusion labels.
     """
-    import urllib.request
-    import io
+    csv_path = os.path.join(backend_dir, "datasets/TON_IoT/Train_Test_Network.csv")
+    print(f"Loading local UNSW TON_IoT raw data slice from: {csv_path}...")
     
-    url = "https://raw.githubusercontent.com/PatrickYanZihui/TON_IOT_Intrusion_Detection/2d_detection/rawDataSet/Train_Test_Network.csv"
-    print("Downloading raw TON_IoT records from GitHub via HTTP Range requests...")
-    
+    if not os.path.exists(csv_path):
+        print(f"Error: Local TON_IoT dataset slice not found at {csv_path}.")
+        print("Please run 'python backend/datasets/TON_IoT/reproduce_dataset.py' to download and generate the slice.")
+        return None, None
+        
     try:
-        # 1. Fetch CSV Headers and Normal records from the start of the file
-        req_normal = urllib.request.Request(
-            url, 
-            headers={'Range': 'bytes=0-150000', 'User-Agent': 'Mozilla/5.0'}
-        )
-        with urllib.request.urlopen(req_normal, timeout=10) as r:
-            normal_data = r.read().decode('utf-8-sig', errors='ignore')
-            
-        normal_lines = normal_data.split('\n')
-        if len(normal_lines) > 1:
-            normal_lines = normal_lines[:-1] # Drop potential partial line
-            
-        # 2. Fetch Attack records from the middle of the file
-        req_attack = urllib.request.Request(
-            url, 
-            headers={'Range': 'bytes=25000000-25150000', 'User-Agent': 'Mozilla/5.0'}
-        )
-        with urllib.request.urlopen(req_attack, timeout=10) as r:
-            attack_data = r.read().decode('utf-8-sig', errors='ignore')
-            
-        attack_lines = attack_data.split('\n')
-        # Drop the first partial line and the last potential partial line
-        if len(attack_lines) > 2:
-            attack_lines = attack_lines[1:-1]
-            
-        # 3. Combine them
-        combined_lines = normal_lines + attack_lines
-        combined_csv = '\n'.join(combined_lines)
+        df_raw = pd.read_csv(csv_path, low_memory=False)
+        print(f"Successfully loaded {len(df_raw)} local TON_IoT records (Normal + Attack).")
         
-        df_raw = pd.read_csv(io.StringIO(combined_csv), low_memory=False)
-        print(f"Successfully downloaded and loaded {len(df_raw)} raw TON_IoT records (Normal + Attack).")
-        
-        # 4. Feature Mapping & Imputation (Cross-dataset evaluation strategy)
+        # 1. Feature Mapping & Imputation (Cross-dataset evaluation strategy)
         df_raw["duration"] = pd.to_numeric(df_raw["duration"], errors="coerce").fillna(0.0)
         df_raw["src_pkts"] = pd.to_numeric(df_raw["src_pkts"], errors="coerce").fillna(0)
         df_raw["dst_pkts"] = pd.to_numeric(df_raw["dst_pkts"], errors="coerce").fillna(0)
@@ -128,11 +101,10 @@ def load_real_ton_iot_validation_dataset():
             "attack": mapped_labels
         })
         
-        return df_mapped, "UNSW TON_IoT Network Telemetry (Cross-Dataset)"
+        return df_mapped, "UNSW TON_IoT Network Telemetry (Cross-Dataset Slice)"
         
     except Exception as e:
-        print(f"Failed to load raw TON_IoT dataset from GitHub: {e}")
-        print("Falling back to high-fidelity synthetic realistic validation dataset.")
+        print(f"Failed to load TON_IoT dataset slice: {e}")
         return None, None
 
 def generate_synthetic_realistic_validation_dataset():
