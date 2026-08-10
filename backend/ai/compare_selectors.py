@@ -105,7 +105,7 @@ def run_comparison_experiment():
             results["sig"][cfg]["energy"].append(data["energy"])
             results["sig"][cfg]["security"].append(data["security"])
 
-    # 5. Aggregate averages
+    # 5. Aggregate averages (Simulated evaluation based on empirical benchmark stats lookup)
     summary = {}
     for layer in ["kem", "sig"]:
         summary[layer] = {}
@@ -114,8 +114,8 @@ def run_comparison_experiment():
                 "latency_ms": round(float(np.mean(results[layer][cfg]["latency"])), 4),
                 "memory_mb": round(float(np.mean(results[layer][cfg]["memory"])), 4),
                 "bandwidth_bytes": round(float(np.mean(results[layer][cfg]["bandwidth"])), 1),
-                "energy_cost": round(float(np.mean(results[layer][cfg]["energy"])), 2),
-                "security_level": round(float(np.mean(results[layer][cfg]["security"])), 2)
+                "modeled_relative_energy": round(float(np.mean(results[layer][cfg]["energy"])), 2),
+                "policy_security_weight": round(float(np.mean(results[layer][cfg]["security"])), 2)
             }
 
     # 6. Save results to JSON
@@ -128,20 +128,17 @@ def run_comparison_experiment():
     print("      PQC SUITE COMPARISON SIMULATION RESULTS (BENCHMARK-DRIVEN)")
     print("====================================================")
     print("\n--- KEM SELECTION SIMULATION (Averages across 100 Scenarios) ---\n")
-    print("| Configuration | Decap Latency (ms) | Incremental RAM (MB) | Ciphertext Size (B) | Modeled Energy Cost | Security Level |")
+    print("| Configuration | Decap Latency (ms) | Incremental RAM (MB) | Ciphertext Size (B) | Modeled Relative Energy | Policy Security Weight |")
     print("|---|---|---|---|---|---|")
     for cfg, m in summary["kem"].items():
-        print(f"| {cfg:13s} | {m['latency_ms']:18.4f} | {m['memory_mb']:20.4f} | {m['bandwidth_bytes']:19.1f} | {m['energy_cost']:19.2f} | {m['security_level']:14.2f} |")
+        print(f"| {cfg:13s} | {m['latency_ms']:18.4f} | {m['memory_mb']:20.4f} | {m['bandwidth_bytes']:19.1f} | {m['modeled_relative_energy']:23.2f} | {m['policy_security_weight']:22.2f} |")
 
     print("\n--- SIGNATURE SELECTION SIMULATION (Averages across 100 Scenarios) ---\n")
-    print("| Configuration | Signing Latency (ms) | Incremental RAM (MB) | Signature Size (B) | Modeled Energy Cost | Security Level |")
+    print("| Configuration | Signing Latency (ms) | Incremental RAM (MB) | Signature Size (B) | Modeled Relative Energy | Policy Security Weight |")
     print("|---|---|---|---|---|---|")
     for cfg, m in summary["sig"].items():
-        print(f"| {cfg:13s} | {m['latency_ms']:20.4f} | {m['memory_mb']:20.4f} | {m['bandwidth_bytes']:18.1f} | {m['energy_cost']:19.2f} | {m['security_level']:14.2f} |")
+        print(f"| {cfg:13s} | {m['latency_ms']:20.4f} | {m['memory_mb']:20.4f} | {m['bandwidth_bytes']:18.1f} | {m['modeled_relative_energy']:23.2f} | {m['policy_security_weight']:22.2f} |")
     print("====================================================\n")
-
-if __name__ == "__main__":
-    run_comparison_experiment()
 
 if __name__ == "__main__":
     run_comparison_experiment()

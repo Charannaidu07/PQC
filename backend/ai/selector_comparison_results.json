@@ -4,22 +4,22 @@
             "latency_ms": 0.2627,
             "memory_mb": 0.22,
             "bandwidth_bytes": 768.0,
-            "energy_cost": 1.0,
-            "security_level": 1.0
+            "modeled_relative_energy": 1.0,
+            "policy_security_weight": 1.0
         },
         "ML-KEM-768": {
             "latency_ms": 0.4224,
             "memory_mb": 0.07,
             "bandwidth_bytes": 1088.0,
-            "energy_cost": 1.5,
-            "security_level": 3.0
+            "modeled_relative_energy": 1.5,
+            "policy_security_weight": 3.0
         },
         "Adaptive": {
             "latency_ms": 0.3761,
             "memory_mb": 0.1135,
             "bandwidth_bytes": 995.2,
-            "energy_cost": 1.35,
-            "security_level": 2.42
+            "modeled_relative_energy": 1.35,
+            "policy_security_weight": 2.42
         }
     },
     "sig": {
@@ -27,22 +27,22 @@
             "latency_ms": 1.6371,
             "memory_mb": 0.0,
             "bandwidth_bytes": 2420.0,
-            "energy_cost": 1.5,
-            "security_level": 2.0
+            "modeled_relative_energy": 1.5,
+            "policy_security_weight": 2.0
         },
         "FN-DSA-512": {
             "latency_ms": 13.7074,
             "memory_mb": 0.01,
             "bandwidth_bytes": 653.0,
-            "energy_cost": 3.0,
-            "security_level": 1.0
+            "modeled_relative_energy": 3.0,
+            "policy_security_weight": 1.0
         },
         "Adaptive": {
             "latency_ms": 7.793,
             "memory_mb": 0.0051,
             "bandwidth_bytes": 1518.8,
-            "energy_cost": 2.27,
-            "security_level": 1.49
+            "modeled_relative_energy": 2.27,
+            "policy_security_weight": 1.49
         }
     }
 }
